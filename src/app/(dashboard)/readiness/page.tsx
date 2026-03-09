@@ -34,58 +34,42 @@ export default async function ReadinessBoardPage() {
         orderBy: { date: "desc" },
       });
 
-      if (player.name.includes("Molina")) {
-         console.log(`[DEBUG] Molina Data:`, {
-            wellnessRecord: wellnessRecord ? {
-               date: wellnessRecord.date,
-               sleep: wellnessRecord.sleep,
-               stress: wellnessRecord.stress,
-               fatigue: wellnessRecord.fatigue,
-               sore: wellnessRecord.muscleSoreness
-            } : null,
-            acwr: acwr
-         });
-      }
-
-      // Default mock if no record found so the page doesn't look empty before forms are filled
-      const mockWellness = 70 + ((player.name.length * 3) % 25); 
-
-      let finalScore = 0;
+      // Handle wellness data
       let displayWellness = 0;
       let jointPainIndicator = null;
-      let statusScoreIndicator = 10;
+      let statusScoreIndicator = 0;
       let hasFilledWellnessToday = false;
+      let hasPain = false;
+      let finalScore = 0;
 
       if (wellnessRecord) {
         hasFilledWellnessToday = isSameDay(new Date(wellnessRecord.date), new Date());
 
-        // Calculate based on the formula from implementation plan
-        // Sleep (1-10) is positive
-        // Stress, Fatigue, Soreness (1-10) are negative. Invert: (11 - val)
-        const wBase = (
-            wellnessRecord.sleep + 
-            (11 - wellnessRecord.stress) + 
-            (11 - wellnessRecord.fatigue) + 
-            (11 - wellnessRecord.muscleSoreness)
-        );
-        // Base is out of 40. Convert to percentage.
-        const wellnessPct = (wBase / 40) * 100;
+        const { calculateWeightedReadiness } = await import("@/lib/metrics/readiness");
+        const wScore = await calculateWeightedReadiness(wellnessRecord);
         
-        displayWellness = Math.round(wellnessPct);
+        displayWellness = wScore * 10;
         
         // If wellness is extremely low, punish the final score heavily
-        if (wellnessPct < 40) {
+        if (displayWellness < 40) {
            finalScore = displayWellness * 0.5; // Drag down readiness fast
         } else {
            finalScore = displayWellness * 0.7; // Normal 70% weight
         }
 
-        jointPainIndicator = wellnessRecord.jointPain;
-        statusScoreIndicator = wellnessRecord.statusScore;
+        // Handle Joint Pain Indicator (new Map format)
+        const painKeys = wellnessRecord.jointPainMap ? Object.keys(wellnessRecord.jointPainMap as object) : [];
+        if (painKeys.length > 0) {
+            jointPainIndicator = `${painKeys.length} zonas afectadas`;
+        }
+        const musclePainCount = (wellnessRecord.musclePainMap as string[])?.length || 0;
+        hasPain = painKeys.length > 0 || musclePainCount > 0;
+
+        statusScoreIndicator = wellnessRecord.fatigue; // Using fatigue as "hit" intensity
       } else {
-        // Fallback demo score
-        displayWellness = mockWellness;
-        finalScore = mockWellness * 0.7;
+        // No wellness record found for this player
+        displayWellness = 0;
+        finalScore = 0;
       }
       
       // ACWR Modifier (30% weight roughly)
@@ -102,22 +86,25 @@ export default async function ReadinessBoardPage() {
       // Clamp between 0 and 100
       const finalReadiness = Math.min(Math.max(finalScore, 0), 100);
 
-      let statusMsg = "Optimal recovery metrics";
-      if (jointPainIndicator) {
-         statusMsg = `Note: ${jointPainIndicator}`;
-      } else if (statusScoreIndicator <= 4) {
-         statusMsg = "Player reported feeling banged up.";
+      let statusMsg = "Metricas de recuperación óptimas";
+      if (!wellnessRecord) {
+         statusMsg = "Sin reporte de wellness hoy.";
+      } else if (hasPain) {
+         const painDesc = jointPainIndicator || "Dolor muscular";
+         statusMsg = `⚠️ ALERTA: ${painDesc}`;
+      } else if (statusScoreIndicator >= 7) {
+         statusMsg = "Jugador reporta golpe fuerte.";
       } else if (acwr > 1.5) {
-         statusMsg = "High load risk. Monitor workload.";
+         statusMsg = "Riesgo por carga alta.";
       } else if (displayWellness < 75) {
-         statusMsg = "Wellness check-in below average.";
+         statusMsg = "Wellness por debajo del promedio.";
       } else if (acwr < 0.8) {
-         statusMsg = "Under-loaded. Monitor conditioning.";
+         statusMsg = "Carga baja. Monitorear acondicionamiento.";
       }
 
       let statusCategory = "GREEN";
-      if (finalReadiness < 65 || statusScoreIndicator <= 4) statusCategory = "OUT";
-      else if (finalReadiness <= 85 || statusScoreIndicator <= 6 || displayWellness < 60) statusCategory = "MODIFIED";
+      if (finalReadiness < 65 || statusScoreIndicator >= 8) statusCategory = "OUT";
+      else if (finalReadiness <= 85 || statusScoreIndicator >= 6 || displayWellness < 60) statusCategory = "MODIFIED";
 
       return {
         ...player,
@@ -128,6 +115,7 @@ export default async function ReadinessBoardPage() {
         readiness: finalReadiness,
         statusCategory,
         statusMsg,
+        hasPain,
         hasFilledWellnessToday
       };
     })
@@ -218,7 +206,7 @@ export default async function ReadinessBoardPage() {
               }
 
               return (
-                <Link href={`/players/${player.id}`} key={player.id} className="block bg-[#131313] hover:bg-[#181818] border border-neutral-800/80 hover:border-neutral-700 transition-all rounded-xl p-5 group flex flex-col justify-between relative overflow-hidden cursor-pointer">
+                <Link href={`/players/${player.id}?tab=wellness`} key={player.id} className="block bg-[#131313] hover:bg-[#181818] border border-neutral-800/80 hover:border-neutral-700 transition-all rounded-xl p-5 group flex flex-col justify-between relative overflow-hidden cursor-pointer">
                   {/* Status Indicator */}
                   <div className="absolute top-5 right-5 flex flex-col items-end gap-1.5">
                     <div className="flex items-center gap-2">

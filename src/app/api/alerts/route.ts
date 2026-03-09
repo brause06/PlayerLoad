@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
+        const { searchParams } = new URL(req.url);
+        const includeRead = searchParams.get("all") === "true";
+
         const alerts = await prisma.alert.findMany({
-            where: { read: false },
+            where: includeRead ? {} : { read: false },
             include: { player: true },
             orderBy: { createdAt: 'desc' },
-            take: 20
+            take: includeRead ? 100 : 20
         });
 
         return NextResponse.json(alerts);
@@ -19,10 +22,18 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
     try {
-        const { id } = await req.json();
+        const { id, markAllRead } = await req.json();
+
+        if (markAllRead) {
+            await prisma.alert.updateMany({
+                where: { read: false },
+                data: { read: true }
+            });
+            return NextResponse.json({ success: true });
+        }
 
         if (!id) {
-            return NextResponse.json({ error: "Alert ID required" }, { status: 400 });
+            return NextResponse.json({ error: "Alert ID or markAllRead flag required" }, { status: 400 });
         }
 
         const alert = await prisma.alert.update({

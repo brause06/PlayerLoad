@@ -1,34 +1,29 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { startOfDay } from "date-fns";
+import { checkSession } from "@/lib/api-protection";
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const { error, session } = await checkSession(["PLAYER"]);
+        if (error) return error;
 
-        if (!session || !session.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        // Only actual players have a playerId assigned to their user
-        const sessionUser = session.user as any;
-        if (sessionUser.role !== "PLAYER" || !sessionUser.playerId) {
-            return NextResponse.json(
-                { error: "Only players can submit wellness data" },
-                { status: 403 }
-            );
+        const sessionUser = session!.user as any;
+        if (!sessionUser.playerId) {
+            return NextResponse.json({ error: "User is not linked to a player profile" }, { status: 400 });
         }
 
         const {
             sleep,
             sleepHours,
+            energy,
             stress,
             fatigue,
             muscleSoreness,
             statusScore,
-            jointPain,
+            comments,
+            jointPainMap,
+            musclePainMap
         } = await req.json();
 
         // Basic Validation
@@ -37,7 +32,7 @@ export async function POST(req: Request) {
             stress < 1 || stress > 10 ||
             fatigue < 1 || fatigue > 10 ||
             muscleSoreness < 1 || muscleSoreness > 10 ||
-            statusScore < 1 || statusScore > 10 ||
+            energy < 1 || energy > 10 ||
             sleepHours < 0 || sleepHours > 24
         ) {
             return NextResponse.json(
@@ -59,24 +54,34 @@ export async function POST(req: Request) {
             update: {
                 sleep,
                 sleepHours,
+                energy,
                 stress,
                 fatigue,
                 muscleSoreness,
                 statusScore,
-                jointPain,
+                comments,
+                jointPainMap,
+                musclePainMap
             },
             create: {
                 playerId: sessionUser.playerId,
                 date: today,
                 sleep,
                 sleepHours,
+                energy,
                 stress,
                 fatigue,
                 muscleSoreness,
                 statusScore,
-                jointPain,
+                comments,
+                jointPainMap,
+                musclePainMap
             },
         });
+
+        // --- Automate Status/Alert Updates ---
+        const { checkWellnessAlerts } = await import("@/lib/metrics/wellness-alerts");
+        await checkWellnessAlerts(sessionUser.playerId);
 
         return NextResponse.json({ success: true, record: wellnessRecord }, { status: 200 });
     } catch (error) {
@@ -90,18 +95,12 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const { error, session } = await checkSession(["PLAYER"]);
+        if (error) return error;
 
-        if (!session || !session.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const sessionUser = session.user as any;
-        if (sessionUser.role !== "PLAYER" || !sessionUser.playerId) {
-            return NextResponse.json(
-                { error: "Only players can fetch wellness data" },
-                { status: 403 }
-            );
+        const sessionUser = session!.user as any;
+        if (!sessionUser.playerId) {
+            return NextResponse.json({ error: "User is not linked to a player profile" }, { status: 400 });
         }
 
         const today = startOfDay(new Date());

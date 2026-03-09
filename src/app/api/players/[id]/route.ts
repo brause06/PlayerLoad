@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { differenceInDays, differenceInWeeks, startOfDay, subDays } from "date-fns";
+import { checkSession } from "@/lib/api-protection";
 
 export async function GET(request: Request, context: any) {
     const { id } = await context.params;
+
+    const { error, session } = await checkSession();
+    if (error) return error;
+
+    // A player can only see their own profile, staff/admin can see any
+    if (session?.user.role === "PLAYER" && (session.user as any).playerId !== id) {
+        return NextResponse.json({ error: "Forbidden: You can only view your own profile" }, { status: 403 });
+    }
 
     try {
         const player = await prisma.player.findUnique({
@@ -23,7 +32,7 @@ export async function GET(request: Request, context: any) {
                     orderBy: {
                         date: 'desc'
                     },
-                    take: 1
+                    take: 30
                 }
             }
         });
@@ -143,7 +152,7 @@ export async function GET(request: Request, context: any) {
             loadTrend,
             comparison,
             injuryRisk,
-            latestWellness: player.wellnessRecords?.[0] || null
+            latestWellness: player.wellnessRecords?.[0] || null, wellnessHistory: player.wellnessRecords
         });
     } catch (error) {
         console.error("Player profile API error", error);
@@ -153,6 +162,9 @@ export async function GET(request: Request, context: any) {
 
 export async function PATCH(request: Request, context: any) {
     const { id } = await context.params;
+
+    const { error } = await checkSession(["ADMIN", "STAFF"]);
+    if (error) return error;
 
     try {
         const body = await request.json();

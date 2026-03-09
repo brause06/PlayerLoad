@@ -76,25 +76,9 @@ export async function updatePlayerStatus(playerId: string, date: Date = new Date
 
     // Check for alerts
     if (metrics.risk === "HIGH") {
-        // Check if an unread alert already exists to prevent spam
-        const existingAlert = await prisma.alert.findFirst({
-            where: {
-                playerId,
-                type: "ACWR_HIGH",
-                read: false
-            }
-        });
-
-        if (!existingAlert) {
-            await prisma.alert.create({
-                data: {
-                    playerId,
-                    type: "ACWR_HIGH",
-                    message: `${player.name} has entered HIGH risk zone (ACWR: ${metrics.acwr}). Immediate workload reduction advised.`
-                }
-            });
-            console.log(`[ALERT] Created ACWR_HIGH alert for ${player.name}`);
-        }
+        const { createAlert } = await import("@/lib/notifications/alerts");
+        await createAlert(playerId, "ACWR_HIGH",
+            `${player.name} has entered HIGH risk zone (ACWR: ${metrics.acwr}). Immediate workload reduction advised.`);
     }
 
     return metrics;

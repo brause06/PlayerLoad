@@ -103,6 +103,7 @@ model DrillData {
   top_speed        Float
   player_load      Float
   minutes          Float    @default(0)
+  match_minutes    Float?   @default(0)
   
   drill            Drill    @relation(fields: [drillId], references: [id], onDelete: Cascade)
   player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -122,6 +123,7 @@ model SessionData {
   top_speed        Float
   player_load      Float
   minutes          Float    @default(0)
+  match_minutes    Float?   @default(0)
   
   session          Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -135,16 +137,20 @@ model Wellness {
   playerId         String
   date             DateTime // Stored as start of day for easy querying
 
-  // Metrics
-  sleep            Int      // 1 (Bad) to 10 (Good)
-  sleepHours       Float
+  // Section 1: Wellness
+  sleep            Int      // 1 (Bad) to 10 (Good) - Sleep Quality
+  sleepHours       Float    // Hours slept
+  energy           Int      @default(5) // 1 (Low) to 10 (High)
   stress           Int      // 1 (Good) to 10 (Bad)
-  fatigue          Int      // 1 (Good) to 10 (Bad)
-  muscleSoreness   Int      // 1 (Good) to 10 (Bad)
   
-  // Independent Status
-  statusScore      Int      // 1 (Banged Up) to 10 (Perfect)
-  jointPain        String?  @db.Text // Optional details of what hurts
+  // Section 2: Golpe/Dolor
+  fatigue          Int      // 1 (Good) to 10 (Bad) - "Que tan golpeado"
+  muscleSoreness   Int      // 1 (Good) to 10 (Bad) - Muscle Pain intensity
+  statusScore      Int      // 1 (Banged Up) to 10 (Perfect) - DEPRECATED (using fatigue for 'hit')
+  
+  comments         String?  @db.Text // "Que necesitamos saber para cuidarte mejor?"
+  jointPainMap     Json?    // Specific joints and intensity
+  musclePainMap    Json?    // Specific muscles (Isquios, etc)
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -153,4 +159,12 @@ model Wellness {
 
   // A player can only have one wellness record per day
   @@unique([playerId, date])
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
 }

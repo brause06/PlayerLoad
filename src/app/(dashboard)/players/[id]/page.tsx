@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, Activity, AlertTriangle, TrendingUp, Zap, Camera, Save, X, Edit2, Calendar, Shield, HeartPulse, Droplet, Phone, Ruler, Scale, Briefcase } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, User, Activity, AlertTriangle, TrendingUp, Zap, Camera, Save, X, Edit2, Calendar, Shield, HeartPulse, Droplet, Phone, Ruler, Scale, Briefcase, Moon, Flame, Brain, Thermometer } from "lucide-react";
+import { PainMap } from "@/components/ui/pain-map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +16,8 @@ import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 export default function PlayerProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") || "performance";
   const [player, setPlayer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -204,10 +207,13 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <Tabs defaultValue="performance" className="mt-6 w-full">
+      <Tabs defaultValue={initialTab} className="mt-6 w-full">
         <TabsList className="bg-[#1a1a1a] border border-neutral-800 mb-6 rounded-lg p-1">
           <TabsTrigger value="performance" className="text-xs uppercase tracking-widest font-bold data-[state=active]:bg-[#262626] data-[state=active]:text-white text-slate-400">
             Performance
+          </TabsTrigger>
+          <TabsTrigger value="wellness" className="text-xs uppercase tracking-widest font-bold data-[state=active]:bg-[#262626] data-[state=active]:text-white text-slate-400">
+            Wellness
           </TabsTrigger>
           <TabsTrigger value="profile" className="text-xs uppercase tracking-widest font-bold data-[state=active]:bg-[#262626] data-[state=active]:text-white text-slate-400">
             Profile details
@@ -378,6 +384,106 @@ export default function PlayerProfilePage() {
               </CardContent>
             </Card>
 
+          </div>
+        </TabsContent>
+
+        <TabsContent value="wellness" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Wellness Trends */}
+            <Card className="bg-[#111111] shadow-sm border-neutral-800 col-span-1 md:col-span-2 lg:col-span-3">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-white font-bold uppercase tracking-widest text-sm">Wellness Trends</CardTitle>
+                    <CardDescription className="text-slate-500">Last 30 days evolution</CardDescription>
+                  </div>
+                  <div className="flex gap-4">
+                     <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sleep</span>
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Energy</span>
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-rose-500"></div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fatigue</span>
+                     </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px] w-full mt-4">
+                   <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={[...(player.wellnessHistory || [])].reverse()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
+                        <XAxis dataKey="date" tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 'bold'}} tickLine={false} axisLine={false} 
+                          tickFormatter={(value) => {
+                            const date = new Date(value);
+                            return `${date.getDate()}/${date.getMonth() + 1}`;
+                          }}
+                        />
+                        <YAxis domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={{fontSize: 10, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                          labelStyle={{ fontWeight: 'bold', color: '#f8fafc', marginBottom: '4px' }}
+                        />
+                        <Line type="monotone" dataKey="sleep" name="Sleep Quality" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, fill: '#6366f1' }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="energy" name="Energy" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="fatigue" name="Fatigue" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, fill: '#f43f5e' }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                   </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pain Map & Latest Report */}
+            <Card className="bg-[#111111] shadow-sm border-neutral-800 col-span-1 md:col-span-2 lg:col-span-3">
+              <CardHeader>
+                <CardTitle className="text-white font-bold uppercase tracking-widest text-sm text-center">Current Pain Map & Daily Snapshot</CardTitle>
+                <CardDescription className="text-slate-500 text-center">Based on the most recent wellness entry</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                   <div className="bg-[#0a0a0a] rounded-3xl p-6 border border-neutral-800/50">
+                      <PainMap 
+                        jointPainMap={player.latestWellness?.jointPainMap || {}} 
+                        musclePainMap={player.latestWellness?.musclePainMap || []} 
+                      />
+                   </div>
+
+                   <div className="space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-[#1a1a1a] p-4 rounded-2xl border border-neutral-800/60">
+                          <div className="flex items-center gap-3 mb-2">
+                             <Moon className="w-4 h-4 text-indigo-400" />
+                             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Sleep Hours</span>
+                          </div>
+                          <div className="text-2xl font-black text-white">{player.latestWellness?.sleepHours || "--"} <span className="text-xs font-bold text-slate-500 uppercase">hrs</span></div>
+                        </div>
+                        <div className="bg-[#1a1a1a] p-4 rounded-2xl border border-neutral-800/60">
+                          <div className="flex items-center gap-3 mb-2">
+                             <Thermometer className="w-4 h-4 text-rose-400" />
+                             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Fatigue Intensity</span>
+                          </div>
+                          <div className="text-2xl font-black text-white">{player.latestWellness?.fatigue || "--"}/10</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-[#1a1a1a] p-6 rounded-2xl border border-neutral-800/60 h-full">
+                         <div className="flex items-center gap-3 mb-4">
+                            <Brain className="w-4 h-4 text-amber-400" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Athlete Comments</span>
+                         </div>
+                         <p className="text-sm text-slate-300 italic leading-relaxed">
+                            "{player.latestWellness?.comments || "No comments provided in the last entry."}"
+                         </p>
+                      </div>
+                   </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

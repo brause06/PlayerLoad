@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Activity, Upload, BarChart2, LogOut } from "lucide-react";
+import { Users, Activity, Upload, BarChart2, LogOut, Bell, Settings } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "./NotificationBell";
@@ -72,6 +72,20 @@ export function Sidebar() {
                 >
                   <Upload className="h-5 w-5 text-indigo-400" />
                   <span>Import Data</span>
+                </Link>
+                <Link 
+                  href="/alerts"
+                  className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${pathname.startsWith('/alerts') ? 'bg-[#222] text-white font-medium border border-neutral-800' : 'hover:bg-[#1a1a1a] hover:text-white border border-transparent'}`}
+                >
+                  <Bell className="h-5 w-5 text-indigo-400" />
+                  <span>Alert Center</span>
+                </Link>
+                <Link 
+                  href="/settings"
+                  className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${pathname.startsWith('/settings') ? 'bg-[#222] text-white font-medium border border-neutral-800' : 'hover:bg-[#1a1a1a] hover:text-white border border-transparent'}`}
+                >
+                  <Settings className="h-5 w-5 text-indigo-400" />
+                  <span>Settings</span>
                 </Link>
             </>
         )}
