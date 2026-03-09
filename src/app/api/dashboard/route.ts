@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { subDays, startOfDay } from "date-fns";
 import { calculateACWR } from "@/lib/metrics/acwr";
+import { getCachedMetrics, setCachedMetrics } from "@/lib/cache/metrics-cache";
 
 export async function GET() {
     try {
+        const cached = getCachedMetrics("dashboard_data");
+        if (cached) return NextResponse.json(cached);
+
         const today = new Date();
         const last7DaysStart = startOfDay(subDays(today, 6));
 
@@ -225,7 +229,7 @@ export async function GET() {
             top_speed_max: sd.top_speed
         }));
 
-        return NextResponse.json({
+        const dashboardData = {
             totalPlayers,
             highRiskPlayers,
             topSpeeds,
@@ -234,7 +238,10 @@ export async function GET() {
             distanceKm,
             positionalAverages,
             matchVsTraining
-        });
+        };
+
+        setCachedMetrics("dashboard_data", dashboardData);
+        return NextResponse.json(dashboardData);
     } catch (error) {
         console.error("Dashboard API Error", error);
         return NextResponse.json({ error: "Failed to load dashboard data" }, { status: 500 });

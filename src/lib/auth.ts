@@ -4,16 +4,18 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import prisma from "./prisma";
 import bcrypt from "bcrypt";
+import { env } from "./env";
 
 export const authOptions: NextAuthOptions = {
     adapter: PrismaAdapter(prisma),
+    secret: env.NEXTAUTH_SECRET,
     session: {
         strategy: "jwt",
     },
     providers: [
         GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID || "",
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+            clientId: env.GOOGLE_CLIENT_ID || "",
+            clientSecret: env.GOOGLE_CLIENT_SECRET || "",
         }),
         CredentialsProvider({
             name: "Sign in",

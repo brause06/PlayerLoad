@@ -53,6 +53,8 @@ model Player {
   user             User?
   alerts           Alert[]
   wellnessRecords  Wellness[]
+
+  @@index([status])
 }
 
 model Alert {
@@ -77,6 +79,8 @@ model Session {
   
   data        SessionData[]
   drills      Drill[]
+
+  @@index([date])
 }
 
 model Drill {
@@ -159,6 +163,7 @@ model Wellness {
 
   // A player can only have one wellness record per day
   @@unique([playerId, date])
+  @@index([date])
 }
 
 model SystemSettings {
