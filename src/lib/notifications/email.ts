@@ -1,26 +1,28 @@
+import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import prisma from "@/lib/prisma";
 import nodemailer from "nodemailer";
 
 /**
- * Service to handle dispatching emails using Gmail SMTP.
- * Requires GMAIL_USER and GMAIL_APP_PASSWORD environment variables.
+ * Service to handle dispatching emails using Gmail SMTP (or similar).
+ * Uses validated environment variables.
  */
 export async function sendEmailNotification(subject: string, message: string) {
     try {
         const settings = await prisma.systemSettings.findMany();
-        const emailAlertsEnabled = settings.find(s => s.key === "email_alerts_enabled")?.value === "true";
-        const targetEmail = settings.find(s => s.key === "notification_email")?.value;
+        const emailAlertsEnabled = settings.find((s: any) => s.key === "email_alerts_enabled")?.value === "true";
+        const targetEmail = settings.find((s: any) => s.key === "notification_email")?.value;
 
         if (!emailAlertsEnabled || !targetEmail) {
-            console.log(`[EMAIL-SKIP] Notifications disabled or no target email set. Target: ${targetEmail}`);
+            logger.info({ targetEmail }, "[EMAIL-SKIP] Notifications disabled or no target email set.");
             return;
         }
 
-        const gmailUser = process.env.GMAIL_USER;
-        const gmailPass = process.env.GMAIL_APP_PASSWORD;
+        const gmailUser = env.GMAIL_USER;
+        const gmailPass = env.GMAIL_APP_PASSWORD;
 
         if (!gmailUser || !gmailPass) {
-            console.warn("[EMAIL-ERROR] GMAIL_USER or GMAIL_APP_PASSWORD not set in environment.");
+            logger.warn("[EMAIL-ERROR] GMAIL_USER or GMAIL_APP_PASSWORD not set in environment.");
             return;
         }
 
@@ -41,10 +43,10 @@ export async function sendEmailNotification(subject: string, message: string) {
             text: message,
         });
 
-        console.log(`[EMAIL-SENT] Message sent: ${info.messageId} | Target: ${targetEmail}`);
+        logger.info({ messageId: info.messageId, targetEmail }, "[EMAIL-SENT] notification sent successfully.");
         return true;
     } catch (err) {
-        console.error("Failed to send email notification:", err);
+        logger.error({ err }, "Failed to send email notification");
         return false;
     }
 }

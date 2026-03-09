@@ -18,9 +18,6 @@ const envSchema = z.object({
 
     // Node Environment
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-
-    // Optional AI (if merged from future work)
-    GEMINI_API_KEY: z.string().optional(),
 });
 
 /**

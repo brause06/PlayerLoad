@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Activity, Upload, BarChart2, LogOut, Bell, Settings, Sparkles } from "lucide-react";
+import { Users, Activity, Upload, BarChart2, LogOut, Bell, Settings } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "./NotificationBell";
@@ -37,16 +37,6 @@ export function Sidebar() {
                 >
                   <BarChart2 className="h-5 w-5 text-indigo-400" />
                   <span>Dashboard</span>
-                </Link>
-                <Link 
-                  href="/ai-coach"
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${pathname.startsWith('/ai-coach') ? 'bg-indigo-500/10 text-indigo-400 font-medium border border-indigo-500/20' : 'hover:bg-[#1a1a1a] hover:text-white border border-transparent'}`}
-                >
-                  <Sparkles className="h-5 w-5 text-indigo-400" />
-                  <span className="flex items-center gap-2">
-                    Coach Intelligence
-                    <span className="text-[8px] bg-indigo-500 text-white px-1 rounded font-black">AI</span>
-                  </span>
                 </Link>
                 <Link 
                   href="/readiness"
