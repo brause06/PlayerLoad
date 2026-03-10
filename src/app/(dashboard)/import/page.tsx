@@ -16,6 +16,8 @@ function ImportInterface() {
   const [parsedRows, setParsedRows] = useState<any[] | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -99,27 +101,62 @@ function ImportInterface() {
     setParsedHeaders(null);
     setParsedRows(null);
     setImportResult(null);
+    setProgress(0);
+    setStatusMessage("");
   };
 
   const handleImport = async () => {
     if (!parsedRows) return;
     setIsProcessing(true);
     setImportResult(null);
+    setProgress(0);
+    setStatusMessage("Iniciando importación...");
 
     try {
-      const res = await fetch("/api/import", {
+      const response = await fetch("/api/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: parsedRows }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setImportResult({ success: true, message: data.message });
-      } else {
-        setImportResult({ success: false, message: data.error || "Error importing data" });
+
+      if (!response.body) throw new Error("No response body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        const chunk = decoder.decode(value, { stream: true });
+        
+        // Handle newline-delimited JSON (ndjson)
+        const lines = chunk.split("\n").filter(Boolean);
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            
+            if (data.progress !== undefined) {
+              setProgress(data.progress);
+            }
+            if (data.message) {
+              setStatusMessage(data.message);
+            }
+            if (data.success) {
+              setImportResult({ success: true, message: data.message });
+            }
+            if (data.error) {
+              setImportResult({ success: false, message: data.error });
+              setIsProcessing(false);
+              return;
+            }
+          } catch (e) {
+            console.error("Error parsing progress chunk", e);
+          }
+        }
       }
     } catch (e) {
-      setImportResult({ success: false, message: "Network error importing data." });
+      setImportResult({ success: false, message: "Error de red al importar los datos." });
     } finally {
       setIsProcessing(false);
     }
@@ -220,6 +257,26 @@ function ImportInterface() {
                             ))}
                           </TableBody>
                         </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progress Bar UI */}
+                  {isProcessing && (
+                    <div className="mt-6 space-y-3">
+                      <div className="flex justify-between items-end">
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-400 animate-pulse">
+                          {statusMessage}
+                        </span>
+                        <span className="text-[10px] font-black tabular-nums text-white">
+                          {Math.round(progress)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-indigo-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                          style={{ width: `${progress}%` }}
+                        />
                       </div>
                     </div>
                   )}
