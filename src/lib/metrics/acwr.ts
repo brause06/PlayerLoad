@@ -34,6 +34,8 @@ export async function calculateACWR(playerId: string, targetDate: Date) {
     let chronicTotal = 0;
 
     for (const s of sessions) {
+        if (!s.session) continue; // Skip if session data is missing
+
         const sDate = startOfDay(s.session.date);
         const load = s.player_load || 0;
 
