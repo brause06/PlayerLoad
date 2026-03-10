@@ -59,10 +59,13 @@ function parseNum(val: any): number {
 
 export async function POST(req: Request) {
     try {
-        const { error } = await checkSession(["ADMIN", "STAFF"]);
-        if (error) return error;
+        const { error: sessionError } = await checkSession(["ADMIN", "STAFF"]);
+        if (sessionError) return sessionError;
 
-        const { rows } = await req.json();
+        const body = await req.json();
+        const { rows } = body;
+
+        console.log(`[Import] Processing ${rows?.length || 0} rows`);
 
         if (!rows || !Array.isArray(rows) || rows.length === 0) {
             return NextResponse.json({ error: "No data provided" }, { status: 400 });
@@ -72,24 +75,31 @@ export async function POST(req: Request) {
         const sessionDates = [...new Set(rows.map((r: any) => getValue(r, "DATE")).filter(Boolean))];
         const allPlayerNames = [...new Set(rows.map((r: any) => getValue(r, "PLAYER")).filter(Boolean))];
 
-        // 2. Pre-fetch all relevant data in parallel to avoid N+1 queries
+        console.log(`[Import] Unique Dates: ${sessionDates.length}, Unique Players: ${allPlayerNames.length}`);
+
+        // 2. Pre-fetch all relevant data in parallel
+        const validDates = sessionDates
+            .map(d => robustParseDate(d))
+            .filter((d): d is Date => d !== null && !isNaN(d.getTime()))
+            .map(d => startOfDay(d));
+
         const [existingPlayers, existingSessions] = await Promise.all([
             prisma.player.findMany({
                 where: {
                     OR: [
-                        { name: { in: allPlayerNames as string[] } },
-                        { gps_id: { in: allPlayerNames as string[] } }
+                        { name: { in: allPlayerNames as string[] } } as any,
+                        { gps_id: { in: allPlayerNames as string[] } } as any
                     ]
                 }
             }),
             prisma.session.findMany({
                 where: {
-                    date: {
-                        in: sessionDates.map(d => startOfDay(robustParseDate(d)!)).filter(d => !isNaN(d.getTime()))
-                    }
+                    date: { in: validDates }
                 }
             })
         ]);
+
+        console.log(`[Import] Pre-fetched Players: ${existingPlayers.length}, Sessions: ${existingSessions.length}`);
 
         const playerMap = new Map<string, any>();
         existingPlayers.forEach(p => {
