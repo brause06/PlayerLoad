@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, User, Activity, AlertTriangle, TrendingUp, Zap, Camera, Save, X, Edit2, Calendar, Shield, HeartPulse, Droplet, Phone, Ruler, Scale, Briefcase, Moon, Flame, Brain, Thermometer } from "lucide-react";
+import { ArrowLeft, User, Activity, AlertTriangle, TrendingUp, Zap, Camera, Save, X, Edit2, Calendar, Shield, HeartPulse, Droplet, Phone, Ruler, Scale, Briefcase, Moon, Flame, Brain, Thermometer, ShieldCheck, Mail, Key } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { PainMap } from "@/components/ui/pain-map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,14 @@ export default function PlayerProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
+
+  // Account management state
+  const [accountStatus, setAccountStatus] = useState<{ hasAccount: boolean; email: string | null } | null>(null);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -56,6 +65,57 @@ export default function PlayerProfilePage() {
       fetchPlayer();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    async function fetchAccountStatus() {
+      if (!isAdmin) return;
+      setAccountLoading(true);
+      try {
+        const res = await fetch(`/api/players/${params.id}/account`);
+        if (res.ok) {
+          const data = await res.json();
+          setAccountStatus(data);
+          setAccountEmail(data.email || "");
+        }
+      } catch (err) {
+        console.error("Failed to load account status", err);
+      } finally {
+        setAccountLoading(false);
+      }
+    }
+    if (params.id && isAdmin) {
+      fetchAccountStatus();
+    }
+  }, [params.id, isAdmin]);
+
+  const handleCreateAccount = async () => {
+    if (!accountEmail || !accountEmail.includes("@")) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    setAccountSaving(true);
+    try {
+      const res = await fetch(`/api/players/${params.id}/account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: accountEmail }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAccountStatus({ hasAccount: true, email: accountEmail });
+        alert(data.message || "Account managed successfully.");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to manage account.");
+      }
+    } catch (err) {
+      alert("Network error occurred.");
+    } finally {
+      setAccountSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (player) {
@@ -263,7 +323,7 @@ export default function PlayerProfilePage() {
                         />
                         <YAxis tick={{fontSize: 10, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
                         <Tooltip 
-                          contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                          contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0(dashboard)/import/page.tsx) 0 0 / 0.5)' }}
                           labelStyle={{ fontWeight: 'bold', color: '#f8fafc', marginBottom: '4px' }}
                           itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
                         />
@@ -752,6 +812,69 @@ export default function PlayerProfilePage() {
                     )}
                  </CardContent>
                </Card>
+
+               {/* Account Access Section (Admin Only) */}
+               {isAdmin && (
+                 <Card className="bg-[#111111] border-neutral-800 md:col-span-3 overflow-hidden relative group">
+                   <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600"></div>
+                   <CardHeader className="border-b border-neutral-800/50 pb-4">
+                     <div className="flex items-center gap-3">
+                       <div className="p-2 bg-indigo-500/20 rounded-lg">
+                         <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                       </div>
+                       <CardTitle className="text-white font-black uppercase tracking-widest text-xs">Gestión de Acceso del Jugador</CardTitle>
+                     </div>
+                   </CardHeader>
+                   <CardContent className="pt-6">
+                     <div className="max-w-xl space-y-4">
+                       <p className="text-xs font-medium text-slate-400">
+                         Asigna un correo electrónico para que el jugador pueda acceder a su plataforma. La contraseña por defecto para todos será <code className="bg-[#1a1a1a] px-1.5 py-0.5 rounded text-indigo-400 font-bold">rugby2026</code>.
+                       </p>
+                       
+                       <div className="flex flex-col sm:flex-row gap-3">
+                         <div className="relative flex-1">
+                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                           <Input 
+                             type="email"
+                             placeholder="jugador@equipo.com"
+                             className="pl-10 bg-[#0d0d0d] border-neutral-800 text-sm focus:ring-indigo-500/50"
+                             value={accountEmail}
+                             onChange={(e) => setAccountEmail(e.target.value)}
+                             disabled={accountSaving || accountLoading}
+                           />
+                         </div>
+                         <Button 
+                           className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6"
+                           onClick={handleCreateAccount}
+                           disabled={accountSaving || accountLoading}
+                         >
+                           {accountSaving ? (
+                             <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+                           ) : accountStatus?.hasAccount ? "Actualizar Cuenta" : "Crear Acceso"}
+                         </Button>
+                       </div>
+                       
+                       {accountStatus?.hasAccount && (
+                         <div className="mt-4 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex items-center gap-3">
+                           <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                           <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">
+                             El jugador ya tiene una cuenta activa vinculada.
+                           </span>
+                         </div>
+                       )}
+                       
+                       {!accountStatus?.hasAccount && !accountLoading && (
+                         <div className="mt-4 p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl flex items-center gap-3">
+                           <Key className="h-4 w-4 text-amber-500 opacity-50" />
+                           <span className="text-[10px] uppercase font-bold tracking-widest text-amber-500/80">
+                             Este jugador aún no tiene credenciales de acceso.
+                           </span>
+                         </div>
+                       )}
+                     </div>
+                   </CardContent>
+                 </Card>
+               )}
             </div>
         </TabsContent>
       </Tabs>
