@@ -67,6 +67,17 @@ export default function PlayerProfilePage() {
   }, [params.id]);
 
   useEffect(() => {
+    if (player?.user) {
+      setAccountEmail(player.user.email || "");
+      setAccountStatus({
+        hasAccount: true,
+        email: player.user.email,
+        role: player.user.role
+      });
+    }
+  }, [player]);
+
+  useEffect(() => {
     async function fetchAccountStatus() {
       if (!isAdmin) return;
       setAccountLoading(true);

@@ -18,6 +18,7 @@ export async function GET(request: Request, context: any) {
         const player = await prisma.player.findUnique({
             where: { id },
             include: {
+                user: true,
                 sessions: {
                     include: {
                         session: true,
