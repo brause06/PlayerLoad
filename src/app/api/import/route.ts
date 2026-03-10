@@ -95,7 +95,8 @@ export async function POST(req: Request) {
             prisma.session.findMany({
                 where: {
                     date: { in: validDates }
-                }
+                },
+                include: { drills: true }
             })
         ]);
 
@@ -108,8 +109,13 @@ export async function POST(req: Request) {
         });
 
         const sessionMap = new Map<string, any>();
+        const drillMap = new Map<string, any>(); // key: sessionId_drillName
+
         existingSessions.forEach(s => {
             sessionMap.set(s.date.toISOString().split('T')[0], s);
+            s.drills.forEach((d: any) => {
+                drillMap.set(`${s.id}_${d.name.trim()}`, d);
+            });
         });
 
         let processedSessions = 0;
@@ -243,32 +249,52 @@ export async function POST(req: Request) {
                 // Prepare DrillData writes
                 const drillNames = [...new Set(drillRows.map(r => getValue(r, "BLOCK")?.toString().trim()).filter(Boolean))];
                 for (const drillName of drillNames) {
-                    const drill = await prisma.drill.upsert({
-                        where: { sessionId_name: { sessionId: session.id, name: drillName as string } },
-                        update: {}, create: { sessionId: session.id, name: drillName as string }
-                    });
+                    const drillKey = `${session.id}_${drillName.trim()}`;
+                    let drill = drillMap.get(drillKey);
+
+                    if (!drill) {
+                        drill = await prisma.drill.upsert({
+                            where: { sessionId_name: { sessionId: session.id, name: drillName as string } },
+                            update: {}, create: { sessionId: session.id, name: drillName as string }
+                        });
+                        drillMap.set(drillKey, drill);
+                    }
 
                     const specificDrillRows = drillRows.filter(r => getValue(r, "BLOCK")?.toString().trim() === drillName);
+
+                    // Aggregate Drill Metrics per Player
+                    const playerDrillDataMap = new Map<string, any>();
                     for (const row of specificDrillRows) {
                         const playerName = getValue(row, "PLAYER");
+                        if (!playerName) continue;
                         const player = playerMap.get(playerName);
                         if (!player) continue;
 
-                        const drillStats = {
-                            total_distance: parseNum(getValue(row, "DISTANCE")),
-                            hsr_distance: parseNum(getValue(row, "HSR")),
-                            accelerations: Math.round(parseNum(getValue(row, "ACCEL"))),
-                            decelerations: Math.round(parseNum(getValue(row, "DECEL"))),
-                            top_speed: parseNum(getValue(row, "TOP_SPEED")),
-                            player_load: parseNum(getValue(row, "HMLD")),
-                            minutes: parseNum(getValue(row, "MINUTES")),
-                            match_minutes: parseNum(getValue(row, "MATCH_MINUTES"))
-                        };
+                        let dStats = playerDrillDataMap.get(player.id);
+                        if (!dStats) {
+                            dStats = {
+                                total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0,
+                                top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0
+                            };
+                            playerDrillDataMap.set(player.id, dStats);
+                        }
 
+                        dStats.total_distance += parseNum(getValue(row, "DISTANCE"));
+                        dStats.hsr_distance += parseNum(getValue(row, "HSR"));
+                        dStats.accelerations += Math.round(parseNum(getValue(row, "ACCEL")));
+                        dStats.decelerations += Math.round(parseNum(getValue(row, "DECEL")));
+                        dStats.top_speed = Math.max(dStats.top_speed, parseNum(getValue(row, "TOP_SPEED")));
+                        dStats.player_load += parseNum(getValue(row, "HMLD"));
+                        dStats.minutes += parseNum(getValue(row, "MINUTES"));
+                        dStats.match_minutes += parseNum(getValue(row, "MATCH_MINUTES"));
+                    }
+
+                    // Push aggregated drill stats to operations
+                    for (const [playerId, drillStats] of playerDrillDataMap.entries()) {
                         drillDataOps.push({
-                            where: { drillId_playerId: { drillId: drill.id, playerId: player.id } },
+                            where: { drillId_playerId: { drillId: drill.id, playerId } },
                             update: drillStats,
-                            create: { drillId: drill.id, playerId: player.id, ...drillStats }
+                            create: { drillId: drill.id, playerId, ...drillStats }
                         });
                     }
                 }
@@ -277,18 +303,22 @@ export async function POST(req: Request) {
             }
         }
 
-        // 4. Execute all writes in a single transaction (or batched transactions)
+        // 4. Execute all writes in a single transaction
         console.log(`[Import] Executing Transaction ... SessionData: ${sessionDataOps.length}, DrillData: ${drillDataOps.length}`);
 
         try {
+            // Deduplicate Ops just in case (though aggregation should handle it)
+            const uniqueSessionDataOps = Array.from(new Map(sessionDataOps.map(op => [JSON.stringify(op.where), op])).values());
+            const uniqueDrillDataOps = Array.from(new Map(drillDataOps.map(op => [JSON.stringify(op.where), op])).values());
+
             await prisma.$transaction([
-                ...sessionDataOps.map(op => prisma.sessionData.upsert(op)),
-                ...drillDataOps.map(op => prisma.drillData.upsert(op)),
+                ...uniqueSessionDataOps.map(op => prisma.sessionData.upsert(op)),
+                ...uniqueDrillDataOps.map(op => prisma.drillData.upsert(op)),
                 ...playerUpdateOps
             ]);
             console.log(`[Import] Transaction Successful`);
-        } catch (txError) {
-            console.error(`[Import] Transaction Failed:`, txError);
+        } catch (txError: any) {
+            console.error(`[Import] Transaction Failed:`, txError?.message || txError);
             throw txError;
         }
 
