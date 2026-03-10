@@ -13,11 +13,13 @@ export async function calculateWeightedReadiness(wellness: any) {
         setCachedMetrics("system_settings", settings);
     }
 
-    const wSleep = parseInt(settings.find((s: any) => s.key === "weight_sleep")?.value || "3", 10);
-    const wEnergy = parseInt(settings.find((s: any) => s.key === "weight_energy")?.value || "2", 10);
-    const wFatigue = parseInt(settings.find((s: any) => s.key === "weight_fatigue")?.value || "2", 10);
-    const wSoreness = parseInt(settings.find((s: any) => s.key === "weight_soreness")?.value || "3", 10);
-    const wStress = parseInt(settings.find((s: any) => s.key === "weight_stress")?.value || "2", 10);
+    const settingsList = settings || [];
+
+    const wSleep = parseInt(settingsList.find((s: any) => s.key === "weight_sleep")?.value || "3", 10);
+    const wEnergy = parseInt(settingsList.find((s: any) => s.key === "weight_energy")?.value || "2", 10);
+    const wFatigue = parseInt(settingsList.find((s: any) => s.key === "weight_fatigue")?.value || "2", 10);
+    const wSoreness = parseInt(settingsList.find((s: any) => s.key === "weight_soreness")?.value || "3", 10);
+    const wStress = parseInt(settingsList.find((s: any) => s.key === "weight_stress")?.value || "2", 10);
 
     const totalWeight = wSleep + wEnergy + wFatigue + wSoreness + wStress;
 
