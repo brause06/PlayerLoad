@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 
 export async function POST() {
     try {
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: any) => {
             // 1. Unlink users from players
             await tx.user.updateMany({
                 data: { playerId: null }

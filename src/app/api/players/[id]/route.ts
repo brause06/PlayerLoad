@@ -42,7 +42,7 @@ export async function GET(request: Request, context: any) {
         }
 
         // --- 1. Accumulated Player Load over Time ---
-        const loadTrend = [...player.sessions].reverse().map(sd => ({
+        const loadTrend = [...player.sessions].reverse().map((sd: any) => ({
             date: sd.session.date.toISOString().split("T")[0],
             load: sd.player_load,
             hsr: sd.hsr_distance,

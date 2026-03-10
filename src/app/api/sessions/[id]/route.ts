@@ -47,7 +47,7 @@ export async function GET(request: Request, context: any) {
         }
 
         // Calculate % of Max Top Speed for each player in this session
-        const processedData = session.data.map(d => {
+        const processedData = session.data.map((d: any) => {
             const maxSpeed = d.player.top_speed_max || 0;
             const percentMaxSpeed = maxSpeed > 0 ? (d.top_speed / maxSpeed) * 100 : 0;
             return {

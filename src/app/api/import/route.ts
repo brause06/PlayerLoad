@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         }
 
         // 1. Group rows by date
-        const sessionDates = [...new Set(rows.map(r => getValue(r, "DATE")).filter(Boolean))];
+        const sessionDates = [...new Set(rows.map((r: any) => getValue(r, "DATE")).filter(Boolean))];
 
         // We will do a simplistic approach: one "Session" per Date for the Team.
         // If there are multiple types (TRAINING, MATCH) on the same day, we group them.
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 
             const sessionDay = startOfDay(parsedDate);
 
-            const dayRows = rows.filter(r => getValue(r, "DATE") === dateRaw);
+            const dayRows = rows.filter((r: any) => getValue(r, "DATE") === dateRaw);
             const sessionType = getValue(dayRows[0], "TYPE") || "TRAINING";
             const microcycle = getValue(dayRows[0], "MICROCYCLE") || null;
             const opponent = getValue(dayRows[0], "OPPONENT") || null;
@@ -118,11 +118,11 @@ export async function POST(req: Request) {
 
             // IMPORTANT: In this STATSports export, BLOCK_NAME = "NONE" means the row is
             // the FULL SESSION TOTAL for that player. Any other BLOCK_NAME value is a drill block.
-            const fullSessionRows = dayRows.filter(r => {
+            const fullSessionRows = dayRows.filter((r: any) => {
                 const bn = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
                 return !bn || bn === "" || bn === "NONE" || bn === "TOTAL DAY";
             });
-            const drillRows = dayRows.filter(r => {
+            const drillRows = dayRows.filter((r: any) => {
                 const bn = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
                 return bn && bn !== "" && bn !== "NONE" && bn !== "TOTAL DAY";
             });
@@ -132,14 +132,14 @@ export async function POST(req: Request) {
             if (sessionType.toString().toUpperCase() === "MATCH" && drillRows.length > 0) {
                 // For matches, duration is the sum of minutes of a single player's blocks
                 const firstPlayer = getValue(drillRows[0], "PLAYER");
-                const playerDrillRows = drillRows.filter(r => getValue(r, "PLAYER") === firstPlayer);
+                const playerDrillRows = drillRows.filter((r: any) => getValue(r, "PLAYER") === firstPlayer);
 
                 // Try to use MATCH_MINUTES first, fall back to GPS MINUTES
-                const sumMatchMins = playerDrillRows.reduce((sum, r) => sum + parseNum(getValue(r, "MATCH_MINUTES")), 0);
+                const sumMatchMins = playerDrillRows.reduce((sum: number, r: any) => sum + parseNum(getValue(r, "MATCH_MINUTES")), 0);
                 if (sumMatchMins > 0) {
                     sessionDuration = sumMatchMins;
                 } else {
-                    const sumMinutes = playerDrillRows.reduce((sum, r) => sum + parseNum(getValue(r, "MINUTES")), 0);
+                    const sumMinutes = playerDrillRows.reduce((sum: number, r: any) => sum + parseNum(getValue(r, "MINUTES")), 0);
                     sessionDuration = sumMinutes > 0 ? sumMinutes : 120;
                 }
             } else {
@@ -218,7 +218,7 @@ export async function POST(req: Request) {
             // we must aggregate minutes from individual blocks (drills).
             if (sessionType.toUpperCase() === "MATCH" && drillRows.length > 0) {
                 const playerMinutesMap = new Map<string, { mins: number, matchMins: number }>();
-                drillRows.forEach(row => {
+                drillRows.forEach((row: any) => {
                     const playerName = getValue(row, "PLAYER");
                     if (!playerName) return;
                     const mins = parseNum(getValue(row, "MINUTES"));
@@ -231,7 +231,7 @@ export async function POST(req: Request) {
                     });
                 });
 
-                playerMinutesMap.forEach((stats, name) => {
+                playerMinutesMap.forEach((stats: any, name: string) => {
                     const existing = playerSessionDataMap.get(name);
                     if (existing) {
                         if (existing.minutes === 0 || !existing.minutes) {
@@ -276,7 +276,7 @@ export async function POST(req: Request) {
                         where: { playerId: null, role: "PLAYER" }
                     });
 
-                    const matchingUser = unlinkedUsers.find(u => {
+                    const matchingUser = unlinkedUsers.find((u: any) => {
                         if (!u.name) return false;
                         const cleanP = playerName.toLowerCase().replace(/[^a-z]/g, '');
                         const cleanU = u.name.toLowerCase().replace(/[^a-z]/g, '');
@@ -342,7 +342,7 @@ export async function POST(req: Request) {
             }
 
             // Process Drills
-            const drillNames = [...new Set(drillRows.map(r => (getValue(r, "BLOCK") || "Unknown").toString().trim()))];
+            const drillNames = [...new Set(drillRows.map((r: any) => (getValue(r, "BLOCK") || "Unknown").toString().trim()))];
 
             for (const drillName of drillNames) {
                 if (drillName === "Unknown") continue;
@@ -365,7 +365,7 @@ export async function POST(req: Request) {
                     });
                 }
 
-                const specificDrillRows = drillRows.filter(r => (getValue(r, "BLOCK") || "").toString().trim() === drillName);
+                const specificDrillRows = drillRows.filter((r: any) => (getValue(r, "BLOCK") || "").toString().trim() === drillName);
 
                 for (const row of specificDrillRows) {
                     const playerName = getValue(row, "PLAYER");

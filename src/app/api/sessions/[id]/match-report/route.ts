@@ -7,8 +7,8 @@ const BACKS = ["SCRUM HALF", "FLY HALF", "APERTURA", "CENTRE", "CENTER", "BACK 3
 
 function getGroup(position: string): "FORWARDS" | "BACKS" | "OTHER" {
     const p = position.toUpperCase();
-    if (FORWARDS.some(f => p.includes(f))) return "FORWARDS";
-    if (BACKS.some(b => p.includes(b))) return "BACKS";
+    if (FORWARDS.some((f: string) => p.includes(f))) return "FORWARDS";
+    if (BACKS.some((b: string) => p.includes(b))) return "BACKS";
     return "OTHER";
 }
 
@@ -80,15 +80,15 @@ export async function GET(request: Request, context: any) {
 
             // Calculate Game Distance (Sum of Halves: 1T + 2T)
             const gameKeywords = ["1T", "2T", "1ER", "2DO", "1ST", "2ND", "HALF", "TIEMPO", "PARTIDO", "TIME", "FIRST", "SECOND"];
-            const gameDrills = session.drills.filter(drill => {
+            const gameDrills = session.drills.filter((drill: any) => {
                 const name = drill.name.toUpperCase();
-                return gameKeywords.some(kw => name.includes(kw)) && !name.includes("WARMUP") && !name.includes("TOTAL DAY");
+                return gameKeywords.some((kw: string) => name.includes(kw)) && !name.includes("WARMUP") && !name.includes("TOTAL DAY");
             });
 
             let gameDistance = 0;
             if (gameDrills.length > 0) {
-                gameDrills.forEach(gd => {
-                    const gdData = gd.data.find(dd => dd.playerId === d.playerId);
+                gameDrills.forEach((gd: any) => {
+                    const gdData = gd.data.find((dd: any) => dd.playerId === d.playerId);
                     if (gdData) gameDistance += gdData.total_distance;
                 });
             } else {
@@ -97,8 +97,8 @@ export async function GET(request: Request, context: any) {
             }
 
             // Detailed blocks (drills) for this player
-            const blocks = session.drills.map(drill => {
-                const drillData = drill.data.find(dd => dd.playerId === d.playerId);
+            const blocks = session.drills.map((drill: any) => {
+                const drillData = drill.data.find((dd: any) => dd.playerId === d.playerId);
                 if (!drillData) return null;
 
                 const displayDrillMins = (drillData.match_minutes && drillData.match_minutes > 0) ? drillData.match_minutes : drillData.minutes;
@@ -154,17 +154,17 @@ export async function GET(request: Request, context: any) {
                 name: p.playerName,
                 mMin: p.mMinIntensity
             }))
-            .sort((a, b) => b.mMin - a.mMin)
+            .sort((a: any, b: any) => b.mMin - a.mMin)
             .slice(0, 3);
 
         const hsrLeaders = [...reportData]
-            .sort((a, b) => b.hsr - a.hsr)
+            .sort((a: any, b: any) => b.hsr - a.hsr)
             .slice(0, 3)
-            .map(p => ({ name: p.playerName, value: p.hsr }));
+            .map((p: any) => ({ name: p.playerName, value: p.hsr }));
 
         const speedExecution = reportData
-            .filter(p => {
-                const pData = session.data.find(sd => sd.playerId === p.playerId);
+            .filter((p: any) => {
+                const pData = session.data.find((sd: any) => sd.playerId === p.playerId);
                 const player = pData?.player;
                 const maxSpeed = player?.top_speed_max || 0;
                 return maxSpeed > 0 && p.topSpeed >= (maxSpeed * 0.9);
@@ -175,11 +175,11 @@ export async function GET(request: Request, context: any) {
         const backs = reportData.filter(p => getGroup(p.position) === "BACKS" && (p.minutes || 0) >= 30);
 
         const avgMMinForwards = forwards.length > 0
-            ? Math.round(forwards.reduce((sum, p) => sum + p.mMinIntensity, 0) / forwards.length)
+            ? Math.round(forwards.reduce((sum: number, p: any) => sum + p.mMinIntensity, 0) / forwards.length)
             : 0;
 
         const avgMMinBacks = backs.length > 0
-            ? Math.round(backs.reduce((sum, p) => sum + p.mMinIntensity, 0) / backs.length)
+            ? Math.round(backs.reduce((sum: number, p: any) => sum + p.mMinIntensity, 0) / backs.length)
             : 0;
 
         const insights = {
