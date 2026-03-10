@@ -149,8 +149,8 @@ export async function GET(request: Request, context: any) {
 
         // 5. Generate Rugby-Specific Insights
         const intensityLeaders = reportData
-            .filter(p => (p.minutes || 0) >= 30)
-            .map(p => ({
+            .filter((p: any) => (p.minutes || 0) >= 30)
+            .map((p: any) => ({
                 name: p.playerName,
                 mMin: p.mMinIntensity
             }))
@@ -169,10 +169,10 @@ export async function GET(request: Request, context: any) {
                 const maxSpeed = player?.top_speed_max || 0;
                 return maxSpeed > 0 && p.topSpeed >= (maxSpeed * 0.9);
             })
-            .map(p => p.playerName);
+            .map((p: any) => p.playerName);
 
-        const forwards = reportData.filter(p => getGroup(p.position) === "FORWARDS" && (p.minutes || 0) >= 30);
-        const backs = reportData.filter(p => getGroup(p.position) === "BACKS" && (p.minutes || 0) >= 30);
+        const forwards = reportData.filter((p: any) => getGroup(p.position) === "FORWARDS" && (p.minutes || 0) >= 30);
+        const backs = reportData.filter((p: any) => getGroup(p.position) === "BACKS" && (p.minutes || 0) >= 30);
 
         const avgMMinForwards = forwards.length > 0
             ? Math.round(forwards.reduce((sum: number, p: any) => sum + p.mMinIntensity, 0) / forwards.length)

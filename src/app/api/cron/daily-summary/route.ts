@@ -58,7 +58,7 @@ export async function GET(req: Request) {
         message += `Reports received: ${wellnessRecords.length}\n\n`;
 
         message += `--- Low Readiness Players (< 6.0) ---\n`;
-        const lowReadiness = playerReadiness.filter(p => p.score < 6);
+        const lowReadiness = playerReadiness.filter((p: any) => p.score < 6);
         if (lowReadiness.length > 0) {
             lowReadiness.forEach((p: any) => message += `- ${p.name}: ${p.score}\n`);
         } else {

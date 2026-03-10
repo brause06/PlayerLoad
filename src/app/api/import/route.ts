@@ -30,7 +30,7 @@ function getValue(row: any, key: string): any {
         if (row[alias] !== undefined && row[alias] !== null) return row[alias];
         // Case-insensitive & Whitespace-trimmed check
         const target = alias.trim().toUpperCase();
-        const foundKey = rowKeys.find(k => k.trim().toUpperCase() === target);
+        const foundKey = rowKeys.find((k: string) => k.trim().toUpperCase() === target);
         if (foundKey) return row[foundKey];
     }
     return undefined;

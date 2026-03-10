@@ -151,9 +151,9 @@ export async function GET() {
             const topHsrMax = [...playersArr].sort((a, b) => b.hsrMax - a.hsrMax).slice(0, 3);
             const topAccelMax = [...playersArr].sort((a, b) => b.accelMax - a.accelMax).slice(0, 3);
 
-            const topSpeed7d = [...playersArr].filter(p => p.topSpeed7d > 0).sort((a, b) => b.topSpeed7d - a.topSpeed7d).slice(0, 3);
+            const topSpeed7d = [...playersArr].filter((p: any) => p.topSpeed7d > 0).sort((a: any, b: any) => b.topSpeed7d - a.topSpeed7d).slice(0, 3);
 
-            const topSpeedAllTime = (allTimeSpeedsByPos[pos] || []).sort((a, b) => b.speed - a.speed).slice(0, 3);
+            const topSpeedAllTime = (allTimeSpeedsByPos[pos] || []).sort((a: any, b: any) => b.speed - a.speed).slice(0, 3);
 
             return {
                 position: pos,
