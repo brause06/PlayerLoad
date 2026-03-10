@@ -59,229 +59,388 @@ function parseNum(val: any): number {
 
 export async function POST(req: Request) {
     try {
-        const { error: sessionError } = await checkSession(["ADMIN", "STAFF"]);
-        if (sessionError) return sessionError;
+        const { error } = await checkSession(["ADMIN", "STAFF"]);
+        if (error) return error;
 
-        const body = await req.json();
-        const { rows } = body;
-
-        console.log(`[Import] Processing ${rows?.length || 0} rows`);
+        const { rows } = await req.json();
 
         if (!rows || !Array.isArray(rows) || rows.length === 0) {
             return NextResponse.json({ error: "No data provided" }, { status: 400 });
         }
 
-        // 1. Normalize and Group Data by Date
-        const rowsByDate = new Map<string, any[]>();
-        const uniquePlayerNames = new Set<string>();
+        // 1. Group rows by date
+        const sessionDates = [...new Set(rows.map((r: any) => getValue(r, "DATE")).filter(Boolean))];
 
-        rows.forEach((row: any) => {
-            const rawDate = getValue(row, "DATE");
-            const parsed = robustParseDate(rawDate);
-            if (!parsed || isNaN(parsed.getTime())) return;
-
-            const dateKey = startOfDay(parsed).toISOString().split('T')[0];
-            if (!rowsByDate.has(dateKey)) rowsByDate.set(dateKey, []);
-            rowsByDate.get(dateKey)!.push(row);
-
-            const pName = getValue(row, "PLAYER");
-            if (pName) uniquePlayerNames.add(String(pName).trim().toUpperCase());
-        });
-
-        const sortedDateKeys = Array.from(rowsByDate.keys()).sort();
-        const validDateObjs = sortedDateKeys.map(d => new Date(d));
-
-        // 2. Pre-fetch existing records
-        const [existingPlayers, existingSessions] = await Promise.all([
-            prisma.player.findMany({
-                where: {
-                    OR: [
-                        { name: { in: Array.from(uniquePlayerNames) } },
-                        { gps_id: { in: Array.from(uniquePlayerNames) } }
-                    ]
-                }
-            }),
-            prisma.session.findMany({
-                where: { date: { in: validDateObjs } },
-                include: { drills: true }
-            })
-        ]);
-
-        const playerMap = new Map<string, any>();
-        existingPlayers.forEach(p => {
-            playerMap.set(p.name.trim().toUpperCase(), p);
-            if (p.gps_id) playerMap.set(p.gps_id.trim().toUpperCase(), p);
-        });
-
-        const sessionMap = new Map<string, any>();
-        const drillMap = new Map<string, any>(); // key: sessionId_drillName
-        existingSessions.forEach(s => {
-            sessionMap.set(s.date.toISOString().split('T')[0], s);
-            s.drills.forEach((d: any) => {
-                drillMap.set(`${s.id}_${d.name.trim().toUpperCase()}`, d);
-            });
-        });
-
-        // 3. Process Sessions and Prepare Operations
-        const sessionDataOps = new Map<string, any>(); // key: sessionId_playerId
-        const drillDataOps = new Map<string, any>();    // key: drillId_playerId
-        const playerUpdateMap = new Map<string, number>(); // key: playerId, value: topSpeed
-        const playerIdsToUpdate = new Set<string>();
+        // We will do a simplistic approach: one "Session" per Date for the Team.
+        // If there are multiple types (TRAINING, MATCH) on the same day, we group them.
 
         let processedSessions = 0;
         let processedRecords = 0;
+        const playerIdsToUpdate = new Set<string>();
 
-        for (const dateKey of sortedDateKeys) {
-            const dayRows = rowsByDate.get(dateKey)!;
-            const sessionDay = startOfDay(new Date(dateKey));
+        for (const dateRaw of sessionDates) {
+            if (!dateRaw) continue;
 
-            let session = sessionMap.get(dateKey);
-            if (!session) {
-                session = await prisma.session.upsert({
-                    where: { date: sessionDay },
-                    update: {},
-                    create: {
-                        date: sessionDay,
-                        type: getValue(dayRows[0], "TYPE") || "TRAINING",
-                        duration: 120, // default
-                        microcycle: getValue(dayRows[0], "MICROCYCLE") ? String(getValue(dayRows[0], "MICROCYCLE")) : null,
-                        opponent: getValue(dayRows[0], "OPPONENT") ? String(getValue(dayRows[0], "OPPONENT")) : null,
-                    },
-                    include: { drills: true }
-                });
-                sessionMap.set(dateKey, session);
-                processedSessions++;
+            const parsedDate = robustParseDate(dateRaw);
+
+            if (!parsedDate || isNaN(parsedDate.getTime())) {
+                console.warn("Skipping invalid date:", dateRaw);
+                continue;
             }
 
-            // Group rows by player for this session
-            const rowsByPlayer = new Map<string, any[]>();
-            dayRows.forEach(row => {
-                const pName = getValue(row, "PLAYER");
-                if (pName) {
-                    const key = String(pName).trim().toUpperCase();
-                    if (!rowsByPlayer.has(key)) rowsByPlayer.set(key, []);
-                    rowsByPlayer.get(key)!.push(row);
+            const sessionDay = startOfDay(parsedDate);
+
+            const dayRows = rows.filter((r: any) => getValue(r, "DATE") === dateRaw);
+            const sessionType = getValue(dayRows[0], "TYPE") || "TRAINING";
+            const microcycle = getValue(dayRows[0], "MICROCYCLE") || null;
+            const opponent = getValue(dayRows[0], "OPPONENT") || null;
+
+            // Find if we already generated a session for this day. For exactness we would need a unique constraint or check.
+            let session = await prisma.session.findFirst({
+                where: {
+                    date: sessionDay,
                 }
             });
 
-            for (const [pNameKey, pRows] of rowsByPlayer.entries()) {
-                let player = playerMap.get(pNameKey);
-                if (!player) {
-                    player = await prisma.player.upsert({
-                        where: { gps_id: pNameKey },
-                        update: {},
-                        create: { name: pNameKey, gps_id: pNameKey, position: getValue(pRows[0], "POSITION") || "Unknown" }
+            if (!session) {
+                session = await prisma.session.create({
+                    data: {
+                        date: sessionDay,
+                        type: sessionType,
+                        duration: 120, // Defaulting if not specified at session level
+                        microcycle: microcycle ? String(microcycle) : null,
+                        opponent: opponent ? String(opponent) : null,
+                    }
+                });
+            }
+
+            processedSessions++;
+
+            // IMPORTANT: In this STATSports export, BLOCK_NAME = "NONE" means the row is
+            // the FULL SESSION TOTAL for that player. Any other BLOCK_NAME value is a drill block.
+            const fullSessionRows = dayRows.filter((r: any) => {
+                const bn = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
+                return !bn || bn === "" || bn === "NONE" || bn === "TOTAL DAY";
+            });
+            const drillRows = dayRows.filter((r: any) => {
+                const bn = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
+                return bn && bn !== "" && bn !== "NONE" && bn !== "TOTAL DAY";
+            });
+
+            // Calculate session duration
+            let sessionDuration = 120;
+            if (sessionType.toString().toUpperCase() === "MATCH" && drillRows.length > 0) {
+                // For matches, duration is the sum of minutes of a single player's blocks
+                const firstPlayer = getValue(drillRows[0], "PLAYER");
+                const playerDrillRows = drillRows.filter((r: any) => getValue(r, "PLAYER") === firstPlayer);
+
+                // Try to use MATCH_MINUTES first, fall back to GPS MINUTES
+                const sumMatchMins = playerDrillRows.reduce((sum: number, r: any) => sum + parseNum(getValue(r, "MATCH_MINUTES")), 0);
+                if (sumMatchMins > 0) {
+                    sessionDuration = sumMatchMins;
+                } else {
+                    const sumMinutes = playerDrillRows.reduce((sum: number, r: any) => sum + parseNum(getValue(r, "MINUTES")), 0);
+                    sessionDuration = sumMinutes > 0 ? sumMinutes : 120;
+                }
+            } else {
+                // For training or default, use the maximum minutes from full session summaries
+                sessionDuration = fullSessionRows.reduce((max: number, r: any) => {
+                    // Try MATCH_MINUTES first here too (in case user added it to training)
+                    const mMinutes = parseNum(getValue(r, "MATCH_MINUTES"));
+                    const mins = mMinutes > 0 ? mMinutes : parseNum(getValue(r, "MINUTES"));
+                    return mins > max ? mins : max;
+                }, 120);
+            }
+
+            // Update session duration if a valid sessionDuration was found and it's different
+            if (sessionDuration > 0 && session.duration !== sessionDuration) {
+                await prisma.session.update({
+                    where: { id: session.id },
+                    data: { duration: sessionDuration }
+                });
+                session.duration = sessionDuration; // Update local session object
+            }
+
+            // For SessionData - Either use fullSessionRows if available, or aggregate from drillRows
+            // First pass: aggregate detailed data for the full day
+            let playerSessionDataMap = new Map<string, any>();
+
+            if (fullSessionRows.length > 0) {
+                for (const row of fullSessionRows) {
+                    const playerName = getValue(row, "PLAYER");
+                    if (!playerName) continue;
+
+                    playerSessionDataMap.set(playerName, {
+                        total_distance: parseNum(getValue(row, "DISTANCE")),
+                        hsr_distance: parseNum(getValue(row, "HSR")),
+                        accelerations: Math.round(parseNum(getValue(row, "ACCEL"))),
+                        decelerations: Math.round(parseNum(getValue(row, "DECEL"))),
+                        top_speed: parseNum(getValue(row, "TOP_SPEED")),
+                        player_load: parseNum(getValue(row, "HMLD")),
+                        minutes: parseNum(getValue(row, "MINUTES")),
+                        match_minutes: parseNum(getValue(row, "MATCH_MINUTES")),
+                        position: getValue(row, "POSITION") || "Unknown"
                     });
-                    playerMap.set(pNameKey, player);
                 }
+            } else if (drillRows.length > 0) {
+                // If there are no full session rows, aggregate from drills
+                for (const row of drillRows) {
+                    const playerName = getValue(row, "PLAYER");
+                    if (!playerName) continue;
 
-                // Determine if player has 'Total' rows or should use aggregated 'Drills'
-                const fullRows = pRows.filter(r => {
-                    const bn = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
-                    return !bn || bn === "" || bn === "NONE" || bn === "TOTAL DAY";
-                });
-                const drillRows = pRows.filter(r => {
-                    const bn = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
-                    return bn && bn !== "" && bn !== "NONE" && bn !== "TOTAL DAY";
-                });
-
-                const useFullRows = fullRows.length > 0;
-                const statsToUse = useFullRows ? fullRows : drillRows;
-                if (statsToUse.length === 0) continue;
-
-                // Aggregate Session Metrics
-                const sessionStats = {
-                    total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0,
-                    top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0
-                };
-
-                for (const row of statsToUse) {
-                    sessionStats.total_distance += parseNum(getValue(row, "DISTANCE"));
-                    sessionStats.hsr_distance += parseNum(getValue(row, "HSR"));
-                    sessionStats.accelerations += Math.round(parseNum(getValue(row, "ACCEL")));
-                    sessionStats.decelerations += Math.round(parseNum(getValue(row, "DECEL")));
-                    sessionStats.top_speed = Math.max(sessionStats.top_speed, parseNum(getValue(row, "TOP_SPEED")));
-                    sessionStats.player_load += parseNum(getValue(row, "HMLD"));
-                    sessionStats.minutes += parseNum(getValue(row, "MINUTES"));
-                    sessionStats.match_minutes += parseNum(getValue(row, "MATCH_MINUTES"));
-                }
-
-                sessionDataOps.set(`${session.id}_${player.id}`, {
-                    where: { sessionId_playerId: { sessionId: session.id, playerId: player.id } },
-                    update: sessionStats,
-                    create: { sessionId: session.id, playerId: player.id, ...sessionStats }
-                });
-
-                // Prepare Player Update
-                if (sessionStats.top_speed > (player.top_speed_max || 0)) {
-                    const currentBest = playerUpdateMap.get(player.id) || player.top_speed_max || 0;
-                    if (sessionStats.top_speed > currentBest) playerUpdateMap.set(player.id, sessionStats.top_speed);
-                }
-                playerIdsToUpdate.add(player.id);
-                processedRecords++;
-
-                // Process Drills for this Player
-                const playerDrillRowsMap = new Map<string, any[]>();
-                drillRows.forEach(r => {
-                    const dName = getValue(r, "BLOCK")?.toString().trim().toUpperCase();
-                    if (dName) {
-                        if (!playerDrillRowsMap.has(dName)) playerDrillRowsMap.set(dName, []);
-                        playerDrillRowsMap.get(dName)!.push(r);
-                    }
-                });
-
-                for (const [dNameKey, drs] of playerDrillRowsMap.entries()) {
-                    let drill = drillMap.get(`${session.id}_${dNameKey}`);
-                    if (!drill) {
-                        drill = await prisma.drill.upsert({
-                            where: { sessionId_name: { sessionId: session.id, name: dNameKey } },
-                            update: {}, create: { sessionId: session.id, name: dNameKey }
-                        });
-                        drillMap.set(`${session.id}_${dNameKey}`, drill);
-                    }
-
-                    const drillStats = {
-                        total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0,
-                        top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0
+                    const existing = playerSessionDataMap.get(playerName) || {
+                        total_distance: 0,
+                        hsr_distance: 0,
+                        accelerations: 0,
+                        decelerations: 0,
+                        top_speed: 0,
+                        player_load: 0,
+                        minutes: 0,
+                        match_minutes: 0,
+                        position: getValue(row, "POSITION") || "Unknown"
                     };
-                    for (const row of drs) {
-                        drillStats.total_distance += parseNum(getValue(row, "DISTANCE"));
-                        drillStats.hsr_distance += parseNum(getValue(row, "HSR"));
-                        drillStats.accelerations += Math.round(parseNum(getValue(row, "ACCEL")));
-                        drillStats.decelerations += Math.round(parseNum(getValue(row, "DECEL")));
-                        drillStats.top_speed = Math.max(drillStats.top_speed, parseNum(getValue(row, "TOP_SPEED")));
-                        drillStats.player_load += parseNum(getValue(row, "HMLD"));
-                        drillStats.minutes += parseNum(getValue(row, "MINUTES"));
-                        drillStats.match_minutes += parseNum(getValue(row, "MATCH_MINUTES"));
-                    }
 
-                    drillDataOps.set(`${drill.id}_${player.id}`, {
-                        where: { drillId_playerId: { drillId: drill.id, playerId: player.id } },
-                        update: drillStats,
-                        create: { drillId: drill.id, playerId: player.id, ...drillStats }
+                    playerSessionDataMap.set(playerName, {
+                        ...existing,
+                        total_distance: existing.total_distance + parseNum(getValue(row, "DISTANCE")),
+                        hsr_distance: existing.hsr_distance + parseNum(getValue(row, "HSR")),
+                        accelerations: existing.accelerations + Math.round(parseNum(getValue(row, "ACCEL"))),
+                        decelerations: existing.decelerations + Math.round(parseNum(getValue(row, "DECEL"))),
+                        top_speed: Math.max(existing.top_speed, parseNum(getValue(row, "TOP_SPEED"))),
+                        player_load: existing.player_load + parseNum(getValue(row, "HMLD")),
+                        minutes: existing.minutes + parseNum(getValue(row, "MINUTES")),
+                        match_minutes: existing.match_minutes + parseNum(getValue(row, "MATCH_MINUTES")),
+                    });
+                }
+            }
+
+            // EXTRA FIX: For MATCH sessions, if we have summary rows but they have 0 minutes,
+            // we must aggregate minutes from individual blocks (drills).
+            if (sessionType.toUpperCase() === "MATCH" && drillRows.length > 0) {
+                const playerMinutesMap = new Map<string, { mins: number, matchMins: number }>();
+                drillRows.forEach((row: any) => {
+                    const playerName = getValue(row, "PLAYER");
+                    if (!playerName) return;
+                    const mins = parseNum(getValue(row, "MINUTES"));
+                    const matchMins = parseNum(getValue(row, "MATCH_MINUTES"));
+
+                    const cur = playerMinutesMap.get(playerName) || { mins: 0, matchMins: 0 };
+                    playerMinutesMap.set(playerName, {
+                        mins: cur.mins + mins,
+                        matchMins: cur.matchMins + matchMins
+                    });
+                });
+
+                playerMinutesMap.forEach((stats: any, name: string) => {
+                    const existing = playerSessionDataMap.get(name);
+                    if (existing) {
+                        if (existing.minutes === 0 || !existing.minutes) {
+                            existing.minutes = stats.mins;
+                        }
+                        if (existing.match_minutes === 0 || !existing.match_minutes) {
+                            existing.match_minutes = stats.matchMins;
+                        }
+                    }
+                });
+            }
+
+            for (const [playerName, stats] of playerSessionDataMap.entries()) {
+                // Find Player by EXACT name match since STATSports doesn't export ID in this view
+                let player = await prisma.player.findFirst({
+                    where: {
+                        OR: [
+                            { gps_id: playerName },
+                            { name: playerName }
+                        ]
+                    }
+                });
+
+                if (!player) {
+                    // Auto-create player if doesn't exist to ease onboarding
+                    player = await prisma.player.create({
+                        data: {
+                            name: playerName,
+                            gps_id: playerName,
+                            position: stats.position,
+                        }
+                    });
+                }
+
+                // --- NEW: Auto-link User account if unlinked ---
+                const existingLink = await prisma.user.findFirst({
+                    where: { playerId: player.id }
+                });
+
+                if (!existingLink) {
+                    const unlinkedUsers = await prisma.user.findMany({
+                        where: { playerId: null, role: "PLAYER" }
+                    });
+
+                    const matchingUser = unlinkedUsers.find((u: any) => {
+                        if (!u.name) return false;
+                        const cleanP = playerName.toLowerCase().replace(/[^a-z]/g, '');
+                        const cleanU = u.name.toLowerCase().replace(/[^a-z]/g, '');
+                        return cleanP.includes(cleanU) || cleanU.includes(cleanP) ||
+                            (cleanU.length > 5 && cleanP.startsWith(cleanU.slice(0, 5)));
+                    });
+
+                    if (matchingUser) {
+                        try {
+                            await prisma.user.update({
+                                where: { id: matchingUser.id },
+                                data: { playerId: player.id }
+                            });
+                        } catch (err) {
+                            console.error(`Auto-link failed for ${playerName}:`, err);
+                        }
+                    }
+                }
+                // ----------------------------------------------
+
+                // Upsert SessionData
+                await prisma.sessionData.upsert({
+                    where: {
+                        sessionId_playerId: {
+                            sessionId: session.id,
+                            playerId: player.id
+                        }
+                    },
+                    update: {
+                        total_distance: stats.total_distance,
+                        hsr_distance: stats.hsr_distance,
+                        accelerations: stats.accelerations,
+                        decelerations: stats.decelerations,
+                        top_speed: stats.top_speed,
+                        player_load: stats.player_load,
+                        minutes: stats.minutes,
+                        match_minutes: stats.match_minutes
+                    },
+                    create: {
+                        sessionId: session.id,
+                        playerId: player.id,
+                        total_distance: stats.total_distance,
+                        hsr_distance: stats.hsr_distance,
+                        accelerations: stats.accelerations,
+                        decelerations: stats.decelerations,
+                        top_speed: stats.top_speed,
+                        player_load: stats.player_load,
+                        minutes: stats.minutes,
+                        match_minutes: stats.match_minutes
+                    }
+                });
+
+                // Update Player's all-time max speed if broken
+                if (stats.top_speed > (player.top_speed_max || 0)) {
+                    await prisma.player.update({
+                        where: { id: player.id },
+                        data: { top_speed_max: stats.top_speed }
+                    });
+                }
+
+                processedRecords++;
+                playerIdsToUpdate.add(player.id);
+            }
+
+            // Process Drills
+            const drillNames = [...new Set(drillRows.map((r: any) => (getValue(r, "BLOCK") || "Unknown").toString().trim()))];
+
+            for (const drillName of drillNames) {
+                if (drillName === "Unknown") continue;
+                // Find or create the Drill for this session
+                let drill = await prisma.drill.findUnique({
+                    where: {
+                        sessionId_name: {
+                            sessionId: session.id,
+                            name: drillName
+                        }
+                    }
+                });
+
+                if (!drill) {
+                    drill = await prisma.drill.create({
+                        data: {
+                            sessionId: session.id,
+                            name: drillName,
+                        }
+                    });
+                }
+
+                const specificDrillRows = drillRows.filter((r: any) => (getValue(r, "BLOCK") || "").toString().trim() === drillName);
+
+                for (const row of specificDrillRows) {
+                    const playerName = getValue(row, "PLAYER");
+                    if (!playerName) continue;
+
+                    let player = await prisma.player.findFirst({
+                        where: {
+                            OR: [
+                                { gps_id: playerName },
+                                { name: playerName }
+                            ]
+                        }
+                    });
+
+                    if (!player) {
+                        // Auto-create player if doesn't exist for drill data too
+                        player = await prisma.player.create({
+                            data: {
+                                name: playerName,
+                                gps_id: playerName,
+                                position: getValue(row, "POSITION") || "Unknown",
+                            }
+                        });
+                    }
+                    playerIdsToUpdate.add(player.id);
+                    const total_distance = parseNum(getValue(row, "DISTANCE"));
+                    const hsr_distance = parseNum(getValue(row, "HSR"));
+                    const accelerations = Math.round(parseNum(getValue(row, "ACCEL")));
+                    const decelerations = Math.round(parseNum(getValue(row, "DECEL")));
+                    const top_speed = parseNum(getValue(row, "TOP_SPEED"));
+                    const player_load = parseNum(getValue(row, "HMLD"));
+                    const minutes = parseNum(getValue(row, "MINUTES"));
+                    const match_minutes = parseNum(getValue(row, "MATCH_MINUTES"));
+
+                    // Upsert DrillData
+                    await prisma.drillData.upsert({
+                        where: {
+                            drillId_playerId: {
+                                drillId: drill.id,
+                                playerId: player.id
+                            }
+                        },
+                        update: {
+                            total_distance,
+                            hsr_distance,
+                            accelerations,
+                            decelerations,
+                            top_speed,
+                            player_load,
+                            minutes,
+                            match_minutes
+                        },
+                        create: {
+                            drillId: drill.id,
+                            playerId: player.id,
+                            total_distance,
+                            hsr_distance,
+                            accelerations,
+                            decelerations,
+                            top_speed,
+                            player_load,
+                            minutes,
+                            match_minutes
+                        }
                     });
                 }
             }
         }
 
-        // 4. Final Transaction
-        console.log(`[Import] Transaction Start: SessionData=${sessionDataOps.size}, DrillData=${drillDataOps.size}, PlayerUpdates=${playerUpdateMap.size}`);
-        try {
-            await prisma.$transaction([
-                ...Array.from(sessionDataOps.values()).map(op => prisma.sessionData.upsert(op)),
-                ...Array.from(drillDataOps.values()).map(op => prisma.drillData.upsert(op)),
-                ...Array.from(playerUpdateMap.entries()).map(([pid, speed]) => prisma.player.update({ where: { id: pid }, data: { top_speed_max: speed } }))
-            ]);
-            console.log(`[Import] Transaction Successful`);
-        } catch (txError: any) {
-            console.error(`[Import] Transaction Failed:`, txError?.message || txError);
-            throw txError;
-        }
-
-        // 5. Automated Updates
+        // --- Automate Status Updates ---
+        // After importing all sessions, update ACWR-based status for all involved players
         for (const playerId of playerIdsToUpdate) {
             try {
                 await updatePlayerStatus(playerId);
+
                 // Hamstring Health Check
                 const { checkSpeedMaintenanceAlert } = await import("@/lib/metrics/speed-alerts");
                 await checkSpeedMaintenanceAlert(playerId);

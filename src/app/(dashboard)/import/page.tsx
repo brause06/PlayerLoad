@@ -3,11 +3,10 @@
 import { useState, Suspense } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
-import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronRight, Check, Loader2 } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 
 function ImportInterface() {
   const [dragActive, setDragActive] = useState(false);
@@ -17,7 +16,6 @@ function ImportInterface() {
   const [parsedRows, setParsedRows] = useState<any[] | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -107,54 +105,21 @@ function ImportInterface() {
     if (!parsedRows) return;
     setIsProcessing(true);
     setImportResult(null);
-    setProgress(0);
-
-    const CHUNK_SIZE = 50; // Process 50 rows at a time
-    const chunks = [];
-    for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
-      chunks.push(parsedRows.slice(i, i + CHUNK_SIZE));
-    }
-
-    let successCount = 0;
-    let failCount = 0;
-    let totalSessions = 0;
-    let totalRecords = 0;
 
     try {
-      for (let i = 0; i < chunks.length; i++) {
-        const res = await fetch("/api/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows: chunks[i] }),
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          totalSessions += data.processedSessions || 0;
-          totalRecords += data.processedRecords || 0;
-          successCount++;
-        } else {
-          failCount++;
-        }
-        
-        setProgress(Math.round(((i + 1) / chunks.length) * 100));
-      }
-
-      if (failCount === 0) {
-        setImportResult({ 
-          success: true, 
-          message: `Import complete: ${parsedRows.length} rows processed successfully.` 
-        });
-      } else if (successCount > 0) {
-        setImportResult({ 
-          success: true, 
-          message: `Partial success: ${successCount * CHUNK_SIZE} rows processed, but some batches failed.` 
-        });
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: parsedRows }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setImportResult({ success: true, message: data.message });
       } else {
-        setImportResult({ success: false, message: "All import batches failed. Check your data format." });
+        setImportResult({ success: false, message: data.error || "Error importing data" });
       }
     } catch (e) {
-      setImportResult({ success: false, message: "Network error during import." });
+      setImportResult({ success: false, message: "Network error importing data." });
     } finally {
       setIsProcessing(false);
     }
@@ -259,43 +224,26 @@ function ImportInterface() {
                     </div>
                   )}
                   
-                  <div className="mt-6 pt-6 border-t border-neutral-800 space-y-4">
-                    {isProcessing && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-slate-400">
-                          <span>Processing Data Batches...</span>
-                          <span>{progress}%</span>
+                  <div className="mt-6 pt-6 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="w-full sm:w-auto flex-1">
+                      {importResult && (
+                        <div className={`text-sm font-bold tracking-widest uppercase px-3 py-2 rounded border flex items-center gap-2 ${importResult.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+                          {importResult.success ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                          {importResult.message}
                         </div>
-                        <Progress value={progress} className="h-1.5 bg-neutral-900 border border-neutral-800" />
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="w-full sm:w-auto flex-1">
-                        {importResult && (
-                          <div className={`text-sm font-bold tracking-widest uppercase px-3 py-2 rounded border flex items-center gap-2 ${importResult.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-                            {importResult.success ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                            {importResult.message}
-                          </div>
+                      )}
+                    </div>
+                    <div className="flex gap-3 w-full sm:w-auto">
+                      <Button variant="outline" onClick={handleClear} disabled={isProcessing} className="bg-[#1a1a1a] border-neutral-800 text-slate-300">Cancel</Button>
+                      <Button 
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold"
+                        onClick={handleImport}
+                        disabled={isProcessing || (importResult?.success ?? false)}
+                      >
+                        {isProcessing ? "Importing Data..." : (
+                          <>Process Data <ChevronRight className="h-4 w-4 ml-2" /></>
                         )}
-                      </div>
-                      <div className="flex gap-3 w-full sm:w-auto">
-                        <Button variant="outline" onClick={handleClear} disabled={isProcessing} className="bg-[#1a1a1a] border-neutral-800 text-slate-300">Cancel</Button>
-                        <Button 
-                          className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold"
-                          onClick={handleImport}
-                          disabled={isProcessing || (importResult?.success ?? false)}
-                        >
-                          {isProcessing ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>Process Data <ChevronRight className="h-4 w-4 ml-2" /></>
-                          )}
-                        </Button>
-                      </div>
+                      </Button>
                     </div>
                   </div>
                 </div>

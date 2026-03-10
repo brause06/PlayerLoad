@@ -54,14 +54,14 @@ model Alert {
 
 model Session {
   id         String        @id @default(cuid())
-  date       DateTime      @unique
-  type       String        // Match, Training, Gym, etc.
-  duration   Int           // minutes
+  date       DateTime
+  type       String
+  duration   Int
   microcycle String?
   opponent   String?
-  notes      String?       @db.Text
-  data       SessionData[]
+  notes      String?
   drills     Drill[]
+  data       SessionData[]
 
   @@index([date])
 }
