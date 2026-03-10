@@ -60,19 +60,20 @@ export async function GET(req: Request) {
         message += `--- Low Readiness Players (< 6.0) ---\n`;
         const lowReadiness = playerReadiness.filter(p => p.score < 6);
         if (lowReadiness.length > 0) {
-            lowReadiness.forEach(p => message += `- ${p.name}: ${p.score}\n`);
+            lowReadiness.forEach((p: any) => message += `- ${p.name}: ${p.score}\n`);
         } else {
             message += `None. All players are above threshold.\n`;
         }
 
         message += `\n--- Active High Priority Alerts ---\n`;
         if (activeAlerts.length > 0) {
-            activeAlerts.forEach(a => message += `- [${a.type}] ${a.player.name}: ${a.message}\n`);
+            activeAlerts.forEach((a: any) => message += `- [${a.type}] ${a.player.name}: ${a.message}\n`);
         } else {
             message += `No active alerts.\n`;
         }
 
-        message += `\nGo to dashboard: http://localhost:3000/dashboard`;
+        const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+        message += `\nGo to dashboard: ${baseUrl}/dashboard`;
 
         // 5. Send Notification
         await sendEmailNotification(subject, message);
