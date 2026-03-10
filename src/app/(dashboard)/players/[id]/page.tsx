@@ -848,7 +848,7 @@ export default function PlayerProfilePage() {
                            <Input 
                              type="email"
                              placeholder="jugador@equipo.com"
-                             className="pl-10 bg-[#0d0d0d] border-neutral-800 text-sm focus:ring-indigo-500/50"
+                             className="pl-10 bg-[#0d0d0d] border-neutral-800 text-sm text-white focus:ring-indigo-500/50"
                              value={accountEmail}
                              onChange={(e) => setAccountEmail(e.target.value)}
                              disabled={accountSaving || accountLoading}
