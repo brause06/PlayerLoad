@@ -28,7 +28,7 @@ export default function PlayerProfilePage() {
   const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
 
   // Account management state
-  const [accountStatus, setAccountStatus] = useState<{ hasAccount: boolean; email: string | null } | null>(null);
+  const [accountStatus, setAccountStatus] = useState<{ hasAccount: boolean; email: string | null; role?: string | null } | null>(null);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
