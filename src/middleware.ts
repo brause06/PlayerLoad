@@ -30,6 +30,11 @@ export async function middleware(req: NextRequest) {
         }
     }
 
+    // Skip Auth logic for NextAuth internal routes
+    if (req.nextUrl.pathname.startsWith("/api/auth")) {
+        return null;
+    }
+
     const token = await getToken({ req, secret: env.NEXTAUTH_SECRET });
     const isAuthPage = req.nextUrl.pathname.startsWith("/login");
 
