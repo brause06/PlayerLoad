@@ -157,6 +157,32 @@ export async function POST(req: Request) {
                 });
 
                 const statsRows = fullSessionRows.length > 0 ? fullSessionRows : drillRows;
+                const isAggregate = fullSessionRows.length === 0;
+
+                // Calculate duration
+                let sessionDuration = 120;
+                const sessionType = getValue(dayRows[0], "TYPE") || "TRAINING";
+                if (sessionType.toString().toUpperCase() === "MATCH" && drillRows.length > 0) {
+                    const firstPlayer = getValue(drillRows[0], "PLAYER");
+                    const playerDrillRows = drillRows.filter(r => getValue(r, "PLAYER") === firstPlayer);
+                    const sumMatchMins = playerDrillRows.reduce((sum: number, r: any) => sum + parseNum(getValue(r, "MATCH_MINUTES")), 0);
+                    sessionDuration = sumMatchMins > 0 ? sumMatchMins : playerDrillRows.reduce((sum: number, r: any) => sum + parseNum(getValue(r, "MINUTES")), 0) || 120;
+                } else {
+                    sessionDuration = statsRows.reduce((max: number, r: any) => {
+                        const mMinutes = parseNum(getValue(r, "MATCH_MINUTES"));
+                        const mins = mMinutes > 0 ? mMinutes : parseNum(getValue(r, "MINUTES"));
+                        return mins > max ? mins : max;
+                    }, 120);
+                }
+
+                if (sessionDuration > 0 && session.duration !== sessionDuration) {
+                    await prisma.session.update({
+                        where: { id: session.id },
+                        data: { duration: sessionDuration }
+                    });
+                    session.duration = sessionDuration;
+                }
+
                 for (const row of statsRows) {
                     const playerName = getValue(row, "PLAYER");
                     if (!playerName) continue;
@@ -166,31 +192,32 @@ export async function POST(req: Request) {
                     if (!stats) {
                         stats = {
                             total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0,
-                            top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0, position: getValue(row, "POSITION")
+                            top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0, position: getValue(row, "POSITION") || "Unknown"
                         };
                         playerSessionDataMap.set(playerName, stats);
                         isNew = true;
                     }
 
-                    const isAggregate = fullSessionRows.length === 0;
-                    if (isNew || isAggregate) {
-                        stats.total_distance += parseNum(getValue(row, "DISTANCE"));
-                        stats.hsr_distance += parseNum(getValue(row, "HSR"));
-                        stats.accelerations += Math.round(parseNum(getValue(row, "ACCEL")));
-                        stats.decelerations += Math.round(parseNum(getValue(row, "DECEL")));
-                        stats.top_speed = Math.max(stats.top_speed, parseNum(getValue(row, "TOP_SPEED")));
-                        stats.player_load += parseNum(getValue(row, "HMLD"));
-                        stats.minutes += parseNum(getValue(row, "MINUTES"));
-                        stats.match_minutes += parseNum(getValue(row, "MATCH_MINUTES"));
-                    }
+                    // Always sum the metrics for the player within this context
+                    // This handles both aggregate (summing drills) and multiple "total" rows
+                    stats.total_distance += parseNum(getValue(row, "DISTANCE"));
+                    stats.hsr_distance += parseNum(getValue(row, "HSR"));
+                    stats.accelerations += Math.round(parseNum(getValue(row, "ACCEL")));
+                    stats.decelerations += Math.round(parseNum(getValue(row, "DECEL")));
+                    stats.top_speed = Math.max(stats.top_speed, parseNum(getValue(row, "TOP_SPEED")));
+                    stats.player_load += parseNum(getValue(row, "HMLD"));
+                    stats.minutes += parseNum(getValue(row, "MINUTES"));
+                    stats.match_minutes += parseNum(getValue(row, "MATCH_MINUTES"));
                 }
 
                 // Prepare SessionData writes
                 for (const [playerName, stats] of playerSessionDataMap.entries()) {
                     let player = playerMap.get(playerName);
                     if (!player) {
-                        player = await prisma.player.create({
-                            data: { name: playerName, gps_id: playerName, position: stats.position }
+                        player = await prisma.player.upsert({
+                            where: { gps_id: playerName },
+                            update: { position: stats.position },
+                            create: { name: playerName, gps_id: playerName, position: stats.position }
                         });
                         playerMap.set(playerName, player);
                     }
@@ -251,15 +278,19 @@ export async function POST(req: Request) {
         }
 
         // 4. Execute all writes in a single transaction (or batched transactions)
-        console.log(`[Import] Executing ${sessionDataOps.length} SessionData and ${drillDataOps.length} DrillData operations`);
+        console.log(`[Import] Executing Transaction ... SessionData: ${sessionDataOps.length}, DrillData: ${drillDataOps.length}`);
 
-        // We use individual upserts within a transaction to guarantee atomicity and handle existing records
-        // but it's still much faster because it's ONE database connection round-trip for all of them.
-        await prisma.$transaction([
-            ...sessionDataOps.map(op => prisma.sessionData.upsert(op)),
-            ...drillDataOps.map(op => prisma.drillData.upsert(op)),
-            ...playerUpdateOps
-        ]);
+        try {
+            await prisma.$transaction([
+                ...sessionDataOps.map(op => prisma.sessionData.upsert(op)),
+                ...drillDataOps.map(op => prisma.drillData.upsert(op)),
+                ...playerUpdateOps
+            ]);
+            console.log(`[Import] Transaction Successful`);
+        } catch (txError) {
+            console.error(`[Import] Transaction Failed:`, txError);
+            throw txError;
+        }
 
         // --- Automate Status Updates ---
         // After importing all sessions, update ACWR-based status for all involved players
