@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,46 +7,37 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  password      String?   // For credential auth
-  role          Role      @default(PLAYER) // ADMIN, STAFF, PLAYER
-  playerId      String?   @unique // Link user account to a player profile
-  
-  // Custom relations
-  player        Player?   @relation(fields: [playerId], references: [id])
-}
-
-enum Role {
-  ADMIN
-  STAFF
-  PLAYER
+  id       String  @id @default(cuid())
+  name     String?
+  email    String? @unique
+  password String?
+  role     Role    @default(PLAYER)
+  playerId String? @unique
+  player   Player? @relation(fields: [playerId], references: [id])
 }
 
 model Player {
-  id               String   @id @default(cuid())
-  gps_id           String   @unique // ID from the GPS system
-  name             String
-  position         String
-  age              Int?
-  weight           Float?
-  team             String?
-  top_speed_max    Float?
-  injury_history   String?  @db.Text
-  status           String   @default("ACTIVE")
-  imageUrl         String?
-  height           Float?
-  dob              DateTime?
-  contract_end     DateTime?
-  blood_type       String?
-  emergency_contact String? @db.Text
-  
-  sessions         SessionData[]
-  drills           DrillData[]
-  user             User?
-  alerts           Alert[]
-  wellnessRecords  Wellness[]
+  id                String        @id @default(cuid())
+  gps_id            String        @unique
+  name              String
+  position          String
+  age               Int?
+  weight            Float?
+  team              String?
+  top_speed_max     Float?
+  injury_history    String?
+  status            String        @default("ACTIVE")
+  imageUrl          String?
+  height            Float?
+  dob               DateTime?
+  contract_end      DateTime?
+  blood_type        String?
+  emergency_contact String?
+  alerts            Alert[]
+  drills            DrillData[]
+  sessions          SessionData[]
+  user              User?
+  wellnessRecords   Wellness[]
 
   @@index([status])
 }
@@ -60,108 +45,92 @@ model Player {
 model Alert {
   id        String   @id @default(cuid())
   playerId  String
-  type      String   // "ACWR_HIGH", "NO_SPEED"
+  type      String
   message   String
   createdAt DateTime @default(now())
   read      Boolean  @default(false)
-
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 }
 
 model Session {
-  id          String   @id @default(cuid())
-  date        DateTime
-  type        String   // Match, Training, Gym, etc.
-  duration    Int      // minutes
-  microcycle  String?
-  opponent    String?
-  notes       String?  @db.Text
-  
-  data        SessionData[]
-  drills      Drill[]
+  id         String        @id @default(cuid())
+  date       DateTime      @unique
+  type       String        // Match, Training, Gym, etc.
+  duration   Int           // minutes
+  microcycle String?
+  opponent   String?
+  notes      String?       @db.Text
+  data       SessionData[]
+  drills     Drill[]
 
   @@index([date])
 }
 
 model Drill {
-  id          String   @id @default(cuid())
-  sessionId   String
-  name        String
-  duration    Int?
-  
-  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  data        DrillData[]
+  id        String      @id @default(cuid())
+  sessionId String
+  name      String
+  duration  Int?
+  session   Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  data      DrillData[]
 
   @@unique([sessionId, name])
 }
 
-// This table holds the actual metrics per player per drill/block
 model DrillData {
-  id               String   @id @default(cuid())
-  drillId          String
-  playerId         String
-  total_distance   Float
-  hsr_distance     Float
-  accelerations    Int
-  decelerations    Int
-  top_speed        Float
-  player_load      Float
-  minutes          Float    @default(0)
-  match_minutes    Float?   @default(0)
-  
-  drill            Drill    @relation(fields: [drillId], references: [id], onDelete: Cascade)
-  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id             String @id @default(cuid())
+  drillId        String
+  playerId       String
+  total_distance Float
+  hsr_distance   Float
+  accelerations  Int
+  decelerations  Int
+  top_speed      Float
+  player_load    Float
+  minutes        Float  @default(0)
+  match_minutes  Float? @default(0)
+  drill          Drill  @relation(fields: [drillId], references: [id], onDelete: Cascade)
+  player         Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([drillId, playerId])
 }
 
-// This table holds the actual metrics per player per session
 model SessionData {
-  id               String   @id @default(cuid())
-  sessionId        String
-  playerId         String
-  total_distance   Float
-  hsr_distance     Float
-  accelerations    Int
-  decelerations    Int
-  top_speed        Float
-  player_load      Float
-  minutes          Float    @default(0)
-  match_minutes    Float?   @default(0)
-  
-  session          Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id             String  @id @default(cuid())
+  sessionId      String
+  playerId       String
+  total_distance Float
+  hsr_distance   Float
+  accelerations  Int
+  decelerations  Int
+  top_speed      Float
+  player_load    Float
+  minutes        Float   @default(0)
+  match_minutes  Float?  @default(0)
+  player         Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  session        Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, playerId])
 }
 
-// Daily check-in model for players
 model Wellness {
-  id               String   @id @default(cuid())
-  playerId         String
-  date             DateTime // Stored as start of day for easy querying
+  id             String   @id @default(cuid())
+  playerId       String
+  date           DateTime
+  sleep          Int
+  sleepHours     Float
+  energy         Int      @default(5)
+  stress         Int
+  fatigue        Int
+  muscleSoreness Int
+  statusScore    Int
+  comments       String?
+  jointPainMap   Json?
+  musclePainMap  Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  player         Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
-  // Section 1: Wellness
-  sleep            Int      // 1 (Bad) to 10 (Good) - Sleep Quality
-  sleepHours       Float    // Hours slept
-  energy           Int      @default(5) // 1 (Low) to 10 (High)
-  stress           Int      // 1 (Good) to 10 (Bad)
-  
-  // Section 2: Golpe/Dolor
-  fatigue          Int      // 1 (Good) to 10 (Bad) - "Que tan golpeado"
-  muscleSoreness   Int      // 1 (Good) to 10 (Bad) - Muscle Pain intensity
-  statusScore      Int      // 1 (Banged Up) to 10 (Perfect) - DEPRECATED (using fatigue for 'hit')
-  
-  comments         String?  @db.Text // "Que necesitamos saber para cuidarte mejor?"
-  jointPainMap     Json?    // Specific joints and intensity
-  musclePainMap    Json?    // Specific muscles (Isquios, etc)
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  // A player can only have one wellness record per day
   @@unique([playerId, date])
   @@index([date])
 }
@@ -172,4 +141,10 @@ model SystemSettings {
   value       String
   description String?
   updatedAt   DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  PLAYER
 }
