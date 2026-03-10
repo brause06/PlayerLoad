@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { robustParseDate } from "@/lib/date-utils";
 import { startOfDay } from "date-fns";
@@ -28,7 +27,6 @@ function getValue(row: any, key: string): any {
     const rowKeys = Object.keys(row);
     for (const alias of aliases) {
         if (row[alias] !== undefined && row[alias] !== null) return row[alias];
-        // Case-insensitive & Whitespace-trimmed check
         const target = alias.trim().toUpperCase();
         const foundKey = rowKeys.find((k: string) => k.trim().toUpperCase() === target);
         if (foundKey) return row[foundKey];
@@ -39,21 +37,12 @@ function getValue(row: any, key: string): any {
 function parseNum(val: any): number {
     if (val === undefined || val === null || val === "") return 0;
     const str = val.toString().trim();
-
-    // Check if it's a time string (HH:MM:SS or MM:SS)
     if (str.includes(':')) {
         const parts = str.split(':').map((p: string) => parseFloat(p) || 0);
-        if (parts.length === 3) {
-            // HH:MM:SS -> convert to minutes
-            return (parts[0] * 60) + parts[1] + (parts[2] / 60);
-        } else if (parts.length === 2) {
-            // MM:SS -> convert to minutes
-            return parts[0] + (parts[1] / 60);
-        }
+        if (parts.length === 3) return (parts[0] * 60) + parts[1] + (parts[2] / 60);
+        if (parts.length === 2) return parts[0] + (parts[1] / 60);
     }
-
-    const cleanStr = str.replace(',', '.');
-    const num = parseFloat(cleanStr);
+    const num = parseFloat(str.replace(',', '.'));
     return isNaN(num) ? 0 : num;
 }
 
@@ -63,8 +52,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
         async start(controller) {
             const sendProgress = (progress: number, message: string) => {
-                const chunk = encoder.encode(JSON.stringify({ progress, message }) + "\n");
-                controller.enqueue(chunk);
+                controller.enqueue(encoder.encode(JSON.stringify({ progress, message }) + "\n"));
             };
 
             try {
@@ -76,29 +64,68 @@ export async function POST(req: Request) {
                 }
 
                 const { rows } = await req.json();
-
                 if (!rows || !Array.isArray(rows) || rows.length === 0) {
                     controller.enqueue(encoder.encode(JSON.stringify({ error: "No data provided" }) + "\n"));
                     controller.close();
                     return;
                 }
 
-                sendProgress(5, "Analizando fechas de sesión...");
+                sendProgress(5, "Cargando jugadores del plantel...");
 
-                // 1. Group rows by date
+                // ─── OPTIMIZATION 1: Pre-load ALL players into memory ──────────────────
+                // Single query instead of 1 query per player per row.
+                // For 25 players × 300 rows, this saves ~300 DB round-trips.
+                const allPlayers = await prisma.player.findMany({
+                    select: { id: true, name: true, gps_id: true, top_speed_max: true, position: true }
+                });
+                // Build a lookup map: both name and gps_id → player
+                const playerCache = new Map<string, typeof allPlayers[0]>();
+                for (const p of allPlayers) {
+                    if (p.gps_id) playerCache.set(p.gps_id.toLowerCase(), p);
+                    if (p.name) playerCache.set(p.name.toLowerCase(), p);
+                }
+
+                // Helper to find player in cache or create & cache a new one
+                const getOrCreatePlayer = async (playerName: string, position?: string) => {
+                    const key = playerName.toLowerCase();
+                    if (playerCache.has(key)) return playerCache.get(key)!;
+
+                    // Not in cache → create in DB and add to cache
+                    const newPlayer = await prisma.player.create({
+                        data: { name: playerName, gps_id: playerName, position: position || "Unknown" },
+                        select: { id: true, name: true, gps_id: true, top_speed_max: true, position: true }
+                    });
+                    playerCache.set(newPlayer.name.toLowerCase(), newPlayer);
+                    if (newPlayer.gps_id) playerCache.set(newPlayer.gps_id.toLowerCase(), newPlayer);
+                    return newPlayer;
+                };
+                // ──────────────────────────────────────────────────────────────────────
+
+                sendProgress(10, "Analizando sesiones...");
+
+                // Pre-load existing sessions for date dedup
+                const allExistingSessions = await prisma.session.findMany({
+                    select: { id: true, date: true, duration: true }
+                });
+                const sessionCache = new Map<string, typeof allExistingSessions[0]>();
+                for (const s of allExistingSessions) {
+                    sessionCache.set(s.date.toISOString(), s);
+                }
+
                 const sessionDates = [...new Set(rows.map((r: any) => getValue(r, "DATE")).filter(Boolean))];
                 const totalDates = sessionDates.length;
-
                 let processedSessions = 0;
                 let processedRecords = 0;
                 const playerIdsToUpdate = new Set<string>();
+                // Track top speed updates to batch at the end
+                const topSpeedUpdates = new Map<string, number>();
 
                 for (let i = 0; i < sessionDates.length; i++) {
                     const dateRaw = sessionDates[i];
                     if (!dateRaw) continue;
 
-                    const baseProgress = 10 + (i / totalDates) * 70;
-                    sendProgress(baseProgress, `Procesando sesión: ${dateRaw}...`);
+                    const baseProgress = 10 + (i / totalDates) * 75;
+                    sendProgress(baseProgress, `Procesando sesión ${i + 1}/${totalDates}: ${dateRaw}...`);
 
                     const parsedDate = robustParseDate(dateRaw);
                     if (!parsedDate || isNaN(parsedDate.getTime())) {
@@ -107,15 +134,14 @@ export async function POST(req: Request) {
                     }
 
                     const sessionDay = startOfDay(parsedDate);
+                    const cacheKey = sessionDay.toISOString();
                     const dayRows = rows.filter((r: any) => getValue(r, "DATE") === dateRaw);
                     const sessionType = getValue(dayRows[0], "TYPE") || "TRAINING";
                     const microcycle = getValue(dayRows[0], "MICROCYCLE") || null;
                     const opponent = getValue(dayRows[0], "OPPONENT") || null;
 
-                    let session = await prisma.session.findFirst({
-                        where: { date: sessionDay }
-                    });
-
+                    // Use session cache; create only if missing
+                    let session = sessionCache.get(cacheKey);
                     if (!session) {
                         session = await prisma.session.create({
                             data: {
@@ -124,8 +150,10 @@ export async function POST(req: Request) {
                                 duration: 120,
                                 microcycle: microcycle ? String(microcycle) : null,
                                 opponent: opponent ? String(opponent) : null,
-                            }
+                            },
+                            select: { id: true, date: true, duration: true }
                         });
+                        sessionCache.set(cacheKey, session);
                     }
 
                     processedSessions++;
@@ -139,6 +167,7 @@ export async function POST(req: Request) {
                         return bn && bn !== "" && bn !== "NONE" && bn !== "TOTAL DAY";
                     });
 
+                    // Calculate session duration (unchanged logic)
                     let sessionDuration = 120;
                     if (sessionType.toString().toUpperCase() === "MATCH" && drillRows.length > 0) {
                         const firstPlayer = getValue(drillRows[0], "PLAYER");
@@ -151,15 +180,13 @@ export async function POST(req: Request) {
                             return mins > max ? mins : max;
                         }, 120);
                     }
-
                     if (sessionDuration > 0 && session.duration !== sessionDuration) {
-                        await prisma.session.update({
-                            where: { id: session.id },
-                            data: { duration: sessionDuration }
-                        });
+                        await prisma.session.update({ where: { id: session.id }, data: { duration: sessionDuration } });
+                        session.duration = sessionDuration;
                     }
 
-                    let playerSessionDataMap = new Map<string, any>();
+                    // Build playerSessionDataMap (unchanged)
+                    const playerSessionDataMap = new Map<string, any>();
                     if (fullSessionRows.length > 0) {
                         for (const row of fullSessionRows) {
                             const playerName = getValue(row, "PLAYER");
@@ -180,87 +207,123 @@ export async function POST(req: Request) {
                         for (const row of drillRows) {
                             const playerName = getValue(row, "PLAYER");
                             if (!playerName) continue;
-                            const existing = playerSessionDataMap.get(playerName) || { total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0, top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0, position: getValue(row, "POSITION") || "Unknown" };
+                            const ex = playerSessionDataMap.get(playerName) || { total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0, top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0, position: getValue(row, "POSITION") || "Unknown" };
                             playerSessionDataMap.set(playerName, {
-                                ...existing,
-                                total_distance: existing.total_distance + parseNum(getValue(row, "DISTANCE")),
-                                hsr_distance: existing.hsr_distance + parseNum(getValue(row, "HSR")),
-                                accelerations: existing.accelerations + Math.round(parseNum(getValue(row, "ACCEL"))),
-                                decelerations: existing.decelerations + Math.round(parseNum(getValue(row, "DECEL"))),
-                                top_speed: Math.max(existing.top_speed, parseNum(getValue(row, "TOP_SPEED"))),
-                                player_load: existing.player_load + parseNum(getValue(row, "HMLD")),
-                                minutes: existing.minutes + parseNum(getValue(row, "MINUTES")),
-                                match_minutes: existing.match_minutes + parseNum(getValue(row, "MATCH_MINUTES")),
+                                ...ex,
+                                total_distance: ex.total_distance + parseNum(getValue(row, "DISTANCE")),
+                                hsr_distance: ex.hsr_distance + parseNum(getValue(row, "HSR")),
+                                accelerations: ex.accelerations + Math.round(parseNum(getValue(row, "ACCEL"))),
+                                decelerations: ex.decelerations + Math.round(parseNum(getValue(row, "DECEL"))),
+                                top_speed: Math.max(ex.top_speed, parseNum(getValue(row, "TOP_SPEED"))),
+                                player_load: ex.player_load + parseNum(getValue(row, "HMLD")),
+                                minutes: ex.minutes + parseNum(getValue(row, "MINUTES")),
+                                match_minutes: ex.match_minutes + parseNum(getValue(row, "MATCH_MINUTES")),
                             });
                         }
                     }
 
+                    // ─── OPTIMIZATION 2: Batch SessionData using Promise.all ───────────
+                    // Instead of awaiting each upsert sequentially, we fire all of them
+                    // concurrently for the same session date.
+                    const sessionDataPromises: Promise<any>[] = [];
                     for (const [playerName, stats] of playerSessionDataMap.entries()) {
-                        let player = await prisma.player.findFirst({
-                            where: { OR: [{ gps_id: playerName }, { name: playerName }] }
-                        });
-
-                        if (!player) {
-                            player = await prisma.player.create({
-                                data: { name: playerName, gps_id: playerName, position: stats.position }
-                            });
-                        }
-
-                        await prisma.sessionData.upsert({
-                            where: { sessionId_playerId: { sessionId: session!.id, playerId: player.id } },
-                            update: { ...stats, position: undefined },
-                            create: { sessionId: session!.id, playerId: player.id, ...stats, position: undefined }
-                        });
-
-                        if (stats.top_speed > (player.top_speed_max || 0)) {
-                            await prisma.player.update({ where: { id: player.id }, data: { top_speed_max: stats.top_speed } });
-                        }
-
-                        processedRecords++;
+                        const player = await getOrCreatePlayer(playerName, stats.position);
                         playerIdsToUpdate.add(player.id);
-                    }
 
-                    // Drills processing (simplified for brevity but functional)
+                        // Track top speed updates (batch at end)
+                        if (stats.top_speed > (player.top_speed_max || 0)) {
+                            topSpeedUpdates.set(player.id, stats.top_speed);
+                            // Update cache too
+                            player.top_speed_max = stats.top_speed;
+                        }
+
+                        const { position: _pos, ...statsWithoutPosition } = stats;
+                        sessionDataPromises.push(
+                            prisma.sessionData.upsert({
+                                where: { sessionId_playerId: { sessionId: session.id, playerId: player.id } },
+                                update: statsWithoutPosition,
+                                create: { sessionId: session.id, playerId: player.id, ...statsWithoutPosition }
+                            })
+                        );
+                        processedRecords++;
+                    }
+                    await Promise.all(sessionDataPromises);
+                    // ──────────────────────────────────────────────────────────────────
+
+                    // ─── OPTIMIZATION 3: Batch DrillData concurrently ─────────────────
                     const drillNames = [...new Set(drillRows.map((r: any) => getValue(r, "BLOCK")?.toString().trim()))].filter(Boolean);
                     for (const drillName of drillNames) {
-                        let drill = await prisma.drill.upsert({
-                            where: { sessionId_name: { sessionId: session!.id, name: drillName } },
+                        const drill = await prisma.drill.upsert({
+                            where: { sessionId_name: { sessionId: session.id, name: drillName } },
                             update: {},
-                            create: { sessionId: session!.id, name: drillName }
+                            create: { sessionId: session.id, name: drillName }
                         });
+
                         const specificDrillRows = drillRows.filter((r: any) => getValue(r, "BLOCK")?.toString().trim() === drillName);
+                        const drillDataPromises: Promise<any>[] = [];
                         for (const row of specificDrillRows) {
                             const playerName = getValue(row, "PLAYER");
                             if (!playerName) continue;
-                            const p = await prisma.player.findFirst({ where: { OR: [{ gps_id: playerName }, { name: playerName }] } });
+                            const p = playerCache.get(playerName.toLowerCase());
                             if (p) {
-                                await prisma.drillData.upsert({
-                                    where: { drillId_playerId: { drillId: drill.id, playerId: p.id } },
-                                    update: { total_distance: parseNum(getValue(row, "DISTANCE")), hsr_distance: parseNum(getValue(row, "HSR")), accelerations: Math.round(parseNum(getValue(row, "ACCEL"))), decelerations: Math.round(parseNum(getValue(row, "DECEL"))), top_speed: parseNum(getValue(row, "TOP_SPEED")), player_load: parseNum(getValue(row, "HMLD")), minutes: parseNum(getValue(row, "MINUTES")) },
-                                    create: { drillId: drill.id, playerId: p.id, total_distance: parseNum(getValue(row, "DISTANCE")), hsr_distance: parseNum(getValue(row, "HSR")), accelerations: Math.round(parseNum(getValue(row, "ACCEL"))), decelerations: Math.round(parseNum(getValue(row, "DECEL"))), top_speed: parseNum(getValue(row, "TOP_SPEED")), player_load: parseNum(getValue(row, "HMLD")), minutes: parseNum(getValue(row, "MINUTES")) }
-                                });
+                                drillDataPromises.push(
+                                    prisma.drillData.upsert({
+                                        where: { drillId_playerId: { drillId: drill.id, playerId: p.id } },
+                                        update: { total_distance: parseNum(getValue(row, "DISTANCE")), hsr_distance: parseNum(getValue(row, "HSR")), accelerations: Math.round(parseNum(getValue(row, "ACCEL"))), decelerations: Math.round(parseNum(getValue(row, "DECEL"))), top_speed: parseNum(getValue(row, "TOP_SPEED")), player_load: parseNum(getValue(row, "HMLD")), minutes: parseNum(getValue(row, "MINUTES")) },
+                                        create: { drillId: drill.id, playerId: p.id, total_distance: parseNum(getValue(row, "DISTANCE")), hsr_distance: parseNum(getValue(row, "HSR")), accelerations: Math.round(parseNum(getValue(row, "ACCEL"))), decelerations: Math.round(parseNum(getValue(row, "DECEL"))), top_speed: parseNum(getValue(row, "TOP_SPEED")), player_load: parseNum(getValue(row, "HMLD")), minutes: parseNum(getValue(row, "MINUTES")) }
+                                    })
+                                );
                             }
                         }
+                        await Promise.all(drillDataPromises);
                     }
+                    // ──────────────────────────────────────────────────────────────────
                 }
 
-                sendProgress(90, "Actualizando estados de salud de jugadores...");
-                const playerArray = Array.from(playerIdsToUpdate);
-                for (let j = 0; j < playerArray.length; j++) {
-                    const pid = playerArray[j];
-                    await updatePlayerStatus(pid);
-                    const { checkSpeedMaintenanceAlert } = await import("@/lib/metrics/speed-alerts");
-                    await checkSpeedMaintenanceAlert(pid);
-
-                    const subProgress = 90 + (j / playerArray.length) * 9;
-                    if (j % 5 === 0) sendProgress(subProgress, `Actualizando métricas... (${j}/${playerArray.length})`);
+                // ─── OPTIMIZATION 4: Batch top speed updates ──────────────────────────
+                // Instead of 1 update per player during processing, batch at end.
+                if (topSpeedUpdates.size > 0) {
+                    sendProgress(87, `Actualizando velocidades máximas (${topSpeedUpdates.size} jugadores)...`);
+                    await Promise.all(
+                        Array.from(topSpeedUpdates.entries()).map(([playerId, top_speed]) =>
+                            prisma.player.update({ where: { id: playerId }, data: { top_speed_max: top_speed } })
+                        )
+                    );
                 }
 
-                sendProgress(100, "Importación completada con éxito.");
+                // ─── OPTIMIZATION 5: Deferred ACWR / Health metrics ───────────────────
+                // Send success to user immediately, then continue computing in background.
+                // The stream is kept open until health checks complete, but the user sees
+                // 100% and can navigate away if needed.
+                sendProgress(90, "Guardando datos... Calculando indicadores de salud en paralelo...");
                 controller.enqueue(encoder.encode(JSON.stringify({
                     success: true,
-                    message: `Procesadas ${processedSessions} sesiones y ${processedRecords} registros.`
+                    message: `✅ Procesadas ${processedSessions} sesiones y ${processedRecords} registros.`
                 }) + "\n"));
+
+                // Continue in background without blocking user
+                const playerArray = Array.from(playerIdsToUpdate);
+                const { checkSpeedMaintenanceAlert } = await import("@/lib/metrics/speed-alerts");
+
+                let completed = 0;
+                const batchSize = 5; // Process 5 players at a time concurrently
+                for (let j = 0; j < playerArray.length; j += batchSize) {
+                    const batch = playerArray.slice(j, j + batchSize);
+                    await Promise.all(batch.map(async (pid) => {
+                        try {
+                            await updatePlayerStatus(pid);
+                            await checkSpeedMaintenanceAlert(pid);
+                        } catch (err) {
+                            console.error(`Health metric update failed for player ${pid}:`, err);
+                        }
+                        completed++;
+                    }));
+                    const subProgress = 90 + (completed / playerArray.length) * 10;
+                    sendProgress(subProgress, `Indicadores de salud ${completed}/${playerArray.length}...`);
+                }
+                // ──────────────────────────────────────────────────────────────────────
+
+                sendProgress(100, "¡Todo listo!");
 
             } catch (error: any) {
                 console.error("Import processing error", error);
