@@ -1,5 +1,43 @@
 import prisma from "@/lib/prisma";
-import { subDays, startOfDay, endOfDay } from "date-fns";
+import { subDays, startOfDay, endOfDay, isAfter, isBefore, isEqual } from "date-fns";
+
+/**
+ * Core ACWR calculation logic from a list of pre-fetched session data.
+ * Does not perform any database queries.
+ */
+export function calculateACWRFromData(sessions: any[], targetDate: Date) {
+    const tDate = startOfDay(targetDate);
+    const acuteStart = subDays(tDate, 6); // Last 7 days including target
+
+    let acuteTotal = 0;
+    let chronicTotal = 0;
+
+    for (const s of sessions) {
+        if (!s.session) continue;
+
+        const sDate = startOfDay(new Date(s.session.date));
+        const load = s.player_load || 0;
+
+        // Sum for chronic (assuming sessions passed are already filtered to 28 days)
+        chronicTotal += load;
+
+        // Sum for acute (only last 7 days)
+        if (sDate >= acuteStart) {
+            acuteTotal += load;
+        }
+    }
+
+    const acuteLoadAvg = acuteTotal / 7;
+    const chronicLoadAvg = chronicTotal / 28;
+    const acwr = chronicLoadAvg > 0 ? (acuteLoadAvg / chronicLoadAvg) : 0;
+
+    return {
+        acuteLoadAvg: Math.round(acuteLoadAvg * 100) / 100,
+        chronicLoadAvg: Math.round(chronicLoadAvg * 100) / 100,
+        acwr: Math.round(acwr * 100) / 100,
+        risk: acwr > 1.5 ? "HIGH" : acwr < 0.8 ? "LOW" : "OPTIMAL"
+    };
+}
 
 /**
  * Calculates the Acute to Chronic Workload Ratio (ACWR) for a specific player on a given date.
@@ -8,8 +46,7 @@ import { subDays, startOfDay, endOfDay } from "date-fns";
  */
 export async function calculateACWR(playerId: string, targetDate: Date) {
     const tDate = startOfDay(targetDate);
-    const acuteStart = subDays(tDate, 6); // Last 7 days including target
-    const chronicStart = subDays(tDate, 27); // Last 28 days including target
+    const chronicStart = subDays(tDate, 27); // Last 28 days
 
     // Fetch all sessions for chronic window
     const sessions = await prisma.sessionData.findMany({
@@ -27,40 +64,9 @@ export async function calculateACWR(playerId: string, targetDate: Date) {
         }
     });
 
-    if (sessions.length === 0) return { acuteLoad: 0, chronicLoad: 0, acwr: 0 };
+    if (sessions.length === 0) return { acuteLoadAvg: 0, chronicLoadAvg: 0, acwr: 0, risk: "LOW" };
 
-    // Calculate Loads
-    let acuteTotal = 0;
-    let chronicTotal = 0;
-
-    for (const s of sessions) {
-        if (!s.session) continue; // Skip if session data is missing
-
-        const sDate = startOfDay(s.session.date);
-        const load = s.player_load || 0;
-
-        // Sum for chronic (all 28 days)
-        chronicTotal += load;
-
-        // Sum for acute (only last 7 days)
-        if (sDate >= acuteStart) {
-            acuteTotal += load;
-        }
-    }
-
-    // Daily averages
-    const acuteLoadAvg = acuteTotal / 7;
-    const chronicLoadAvg = chronicTotal / 28;
-
-    // ACWR Ratio
-    const acwr = chronicLoadAvg > 0 ? (acuteLoadAvg / chronicLoadAvg) : 0;
-
-    return {
-        acuteLoadAvg: Math.round(acuteLoadAvg * 100) / 100,
-        chronicLoadAvg: Math.round(chronicLoadAvg * 100) / 100,
-        acwr: Math.round(acwr * 100) / 100,
-        risk: acwr > 1.5 ? "HIGH" : acwr < 0.8 ? "LOW" : "OPTIMAL"
-    };
+    return calculateACWRFromData(sessions, targetDate);
 }
 
 /**
