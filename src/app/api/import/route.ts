@@ -137,9 +137,13 @@ export async function POST(req: Request) {
                     const sessionDay = startOfDay(parsedDate);
                     const cacheKey = sessionDay.toISOString();
                     const dayRows = rows.filter((r: any) => getValue(r, "DATE") === dateRaw);
-                    const sessionType = getValue(dayRows[0], "TYPE") || "TRAINING";
+                    const sessionType = (getValue(dayRows[0], "TYPE") || "TRAINING").toString().toUpperCase();
                     const microcycle = getValue(dayRows[0], "MICROCYCLE") || null;
                     const opponent = getValue(dayRows[0], "OPPONENT") || null;
+
+                    const isEvaluation = sessionType.includes("EVAL") || 
+                                         sessionType.includes("TEST") || 
+                                         sessionType.includes("SPEED");
 
                     // Use session cache; create only if missing
                     let session = sessionCache.get(cacheKey);
@@ -237,8 +241,11 @@ export async function POST(req: Request) {
                             const player = await getOrCreatePlayer(playerName, stats.position);
                             playerIdsToUpdate.add(player.id);
 
+                            const shouldUpdateSpeed = isEvaluation || stats.top_speed > (player.top_speed_max || 0);
+
                             // Track top speed updates (batch at end)
-                            if (stats.top_speed > (player.top_speed_max || 0)) {
+                            // Only update if we have a valid speed (> 0)
+                            if (shouldUpdateSpeed && stats.top_speed > 0) {
                                 topSpeedUpdates.set(player.id, stats.top_speed);
                                 // Update cache too
                                 player.top_speed_max = stats.top_speed;
