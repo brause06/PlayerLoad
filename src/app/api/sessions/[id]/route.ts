@@ -52,7 +52,7 @@ export async function GET(request: Request, context: any) {
             const percentMaxSpeed = maxSpeed > 0 ? (d.top_speed / maxSpeed) * 100 : 0;
             return {
                 ...d,
-                percentMaxSpeed: Math.round(percentMaxSpeed)
+                percentMaxSpeed: Math.round(percentMaxSpeed * 10) / 10 // Added 1 decimal precision
             };
         });
 

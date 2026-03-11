@@ -207,6 +207,11 @@ export async function POST(req: Request) {
                         for (const row of drillRows) {
                             const playerName = getValue(row, "PLAYER");
                             if (!playerName) continue;
+
+                            let top_speed = parseNum(getValue(row, "TOP_SPEED"));
+                            // Auto-convert m/s to km/h if value is suspiciously low (< 15)
+                            if (top_speed > 0 && top_speed < 15) top_speed = Math.round(top_speed * 3.6 * 10) / 10;
+                            
                             const ex = playerSessionDataMap.get(playerName) || { total_distance: 0, hsr_distance: 0, accelerations: 0, decelerations: 0, top_speed: 0, player_load: 0, minutes: 0, match_minutes: 0, position: getValue(row, "POSITION") || "Unknown" };
                             playerSessionDataMap.set(playerName, {
                                 ...ex,
@@ -214,7 +219,7 @@ export async function POST(req: Request) {
                                 hsr_distance: ex.hsr_distance + parseNum(getValue(row, "HSR")),
                                 accelerations: ex.accelerations + Math.round(parseNum(getValue(row, "ACCEL"))),
                                 decelerations: ex.decelerations + Math.round(parseNum(getValue(row, "DECEL"))),
-                                top_speed: Math.max(ex.top_speed, parseNum(getValue(row, "TOP_SPEED"))),
+                                top_speed: Math.max(ex.top_speed, top_speed),
                                 player_load: ex.player_load + parseNum(getValue(row, "HMLD")),
                                 minutes: ex.minutes + parseNum(getValue(row, "MINUTES")),
                                 match_minutes: ex.match_minutes + parseNum(getValue(row, "MATCH_MINUTES")),

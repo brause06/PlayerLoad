@@ -89,11 +89,11 @@ export default function SessionDetailPage() {
           <CardContent>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={session.data.map((d: any) => ({ name: d.player.name.split(' ')[0], maxSpeed: d.top_speed, percentMax: d.percentMaxSpeed }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={session.data.map((d: any) => ({ name: d.player.name.split(' ')[0], maxSpeed: d.top_speed, percentMax: d.percentMaxSpeed }))} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                  <XAxis dataKey="name" tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 'bold'}} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="left" tick={{fontSize: 10, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="right" orientation="right" tick={{fontSize: 10, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="name" tick={{fontSize: 9, fill: '#94a3b8', fontWeight: 'bold'}} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={60} />
+                  <YAxis yAxisId="left" domain={[0, 40]} tick={{fontSize: 10, fill: '#818cf8'}} tickLine={false} axisLine={false} label={{ value: 'km/h', angle: -90, position: 'insideLeft', fill: '#818cf8' }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{fontSize: 10, fill: '#34d399'}} tickLine={false} axisLine={false} label={{ value: '%', angle: 90, position: 'insideRight', fill: '#34d399' }} />
                   <Tooltip 
                      contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
                      labelStyle={{ fontWeight: 'bold', color: '#f8fafc', marginBottom: '4px' }}
