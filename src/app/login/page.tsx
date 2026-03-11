@@ -13,8 +13,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("from") || "/dashboard";
 
-  const [email, setEmail] = useState("admin@loadtrack.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -203,20 +203,6 @@ function LoginForm() {
             </form>
           </div>
           
-          <div className="pt-6 border-t border-slate-100 flex flex-col items-center">
-            <p className="text-xs text-slate-500 mb-3 text-center">Development Environment Setup Tools</p>
-            <Button 
-              type="button" 
-              variant="secondary" 
-              size="sm"
-              className="text-xs font-medium px-4 py-2 border border-slate-200 shadow-sm"
-              onClick={() => {
-                fetch('/api/seed').then(() => alert('Test admin seeded! Click "Sign in" mapped to admin@loadtrack.com.'));
-              }}
-            >
-              Seed Admin Data
-            </Button>
-          </div>
         </div>
       </div>
     </div>

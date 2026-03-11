@@ -44,10 +44,8 @@ export function ReadinessFilters({ positions }: { positions: string[] }) {
             className="pl-9 bg-[#111] border-neutral-800 focus:ring-indigo-500/50"
             defaultValue={searchParams.get("search") || ""}
             onChange={(e) => {
-              // Debounce search if possible or just handle it here
               const val = e.target.value;
-              const timer = setTimeout(() => handleFilterChange("search", val), 500);
-              return () => clearTimeout(timer);
+              handleFilterChange("search", val);
             }}
           />
         </div>

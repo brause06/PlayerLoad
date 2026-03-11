@@ -69,13 +69,13 @@ export default function SessionsPage() {
                   <div className="p-6 bg-[#1a1a1a] border-r border-neutral-800 flex flex-col items-center justify-center min-w-[120px] text-center rounded-l-lg group-hover:bg-indigo-500/10 transition-colors">
                     <Calendar className="h-5 w-5 text-indigo-400 mb-2" />
                     <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      {format(new Date(session.date), "MMM")}
+                      {format(new Date(session.date.split('T')[0] + 'T12:00:00'), "MMM")}
                     </div>
                     <div className="text-3xl font-black text-white leading-none mt-1">
-                      {format(new Date(session.date), "dd")}
+                      {format(new Date(session.date.split('T')[0] + 'T12:00:00'), "dd")}
                     </div>
                     <div className="text-[10px] uppercase font-bold text-slate-600 mt-1">
-                      {format(new Date(session.date), "yyyy")}
+                      {format(new Date(session.date.split('T')[0] + 'T12:00:00'), "yyyy")}
                     </div>
                   </div>
                   
