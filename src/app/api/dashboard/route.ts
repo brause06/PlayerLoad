@@ -38,7 +38,7 @@ export async function GET() {
         });
 
         // 4. Team Load Trend (Last 7 Sessions) 
-        // Aggregate player loads per session
+        // Aggregate player loads per session, filtering out inactive/bench players
         const recentSessions = await prisma.session.findMany({
             orderBy: { date: "desc" },
             take: 7,
@@ -49,8 +49,12 @@ export async function GET() {
 
         // Format for Recharts
         const loadTrend = recentSessions.reverse().map((session: any) => {
-            const avgLoad = session.data.length
-                ? session.data.reduce((acc: number, curr: any) => acc + (curr.player_load || 0), 0) / session.data.length
+            // Only count players who played at least 10 mins or reached 50 load
+            // to avoid diluting the team average with bench players
+            const activeData = session.data.filter((d: any) => (d.minutes || 0) >= 10 || (d.player_load || 0) >= 50);
+            
+            const avgLoad = activeData.length
+                ? activeData.reduce((acc: number, curr: any) => acc + (curr.player_load || 0), 0) / activeData.length
                 : 0;
 
             return {

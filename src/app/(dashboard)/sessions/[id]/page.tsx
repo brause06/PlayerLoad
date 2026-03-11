@@ -61,7 +61,7 @@ export default function SessionDetailPage() {
           <h1 className="text-3xl font-black tracking-tight text-white uppercase flex items-center gap-3">
             {session.type} {session.opponent ? `vs ${session.opponent}` : ""}
             <span className="text-[10px] font-bold bg-[#222] text-slate-400 px-3 py-1 rounded border border-neutral-800 uppercase tracking-widest">
-              {format(new Date(session.date), "PPP")}
+              {format(new Date(session.date.split('T')[0] + 'T12:00:00'), "PPP")}
             </span>
           </h1>
           <p className="text-slate-400 mt-1 uppercase tracking-widest text-[10px] font-bold">

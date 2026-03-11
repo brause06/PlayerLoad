@@ -138,7 +138,8 @@ export default function DashboardPage() {
                       tickLine={false} 
                       axisLine={false} 
                       tickFormatter={(value) => {
-                        const date = new Date(value);
+                        // Force local timezone to avoid 1-day offset
+                        const date = new Date(value + 'T00:00:00');
                         return `${date.getDate()}/${date.getMonth() + 1}`;
                       }}
                     />
