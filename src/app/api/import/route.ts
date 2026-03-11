@@ -71,6 +71,7 @@ export async function POST(req: Request) {
                 }
 
                 sendProgress(5, "Cargando jugadores del plantel...");
+                const BATCH_SIZE = 8; // Global batch size for DB operations
 
                 // ─── OPTIMIZATION 1: Pre-load ALL players into memory ──────────────────
                 // Single query instead of 1 query per player per row.
@@ -227,32 +228,31 @@ export async function POST(req: Request) {
                         }
                     }
 
-                    // ─── OPTIMIZATION 2: Batch SessionData using Promise.all ───────────
-                    // Instead of awaiting each upsert sequentially, we fire all of them
-                    // concurrently for the same session date.
-                    const sessionDataPromises: Promise<any>[] = [];
-                    for (const [playerName, stats] of playerSessionDataMap.entries()) {
-                        const player = await getOrCreatePlayer(playerName, stats.position);
-                        playerIdsToUpdate.add(player.id);
+                    // ─── OPTIMIZATION 2: Batch SessionData to control concurrency ─────
+                    const entries = Array.from(playerSessionDataMap.entries());
+                    
+                    for (let j = 0; j < entries.length; j += BATCH_SIZE) {
+                        const batch = entries.slice(j, j + BATCH_SIZE);
+                        await Promise.all(batch.map(async ([playerName, stats]) => {
+                            const player = await getOrCreatePlayer(playerName, stats.position);
+                            playerIdsToUpdate.add(player.id);
 
-                        // Track top speed updates (batch at end)
-                        if (stats.top_speed > (player.top_speed_max || 0)) {
-                            topSpeedUpdates.set(player.id, stats.top_speed);
-                            // Update cache too
-                            player.top_speed_max = stats.top_speed;
-                        }
+                            // Track top speed updates (batch at end)
+                            if (stats.top_speed > (player.top_speed_max || 0)) {
+                                topSpeedUpdates.set(player.id, stats.top_speed);
+                                // Update cache too
+                                player.top_speed_max = stats.top_speed;
+                            }
 
-                        const { position: _pos, ...statsWithoutPosition } = stats;
-                        sessionDataPromises.push(
-                            prisma.sessionData.upsert({
+                            const { position: _pos, ...statsWithoutPosition } = stats;
+                            await prisma.sessionData.upsert({
                                 where: { sessionId_playerId: { sessionId: session.id, playerId: player.id } },
                                 update: statsWithoutPosition,
                                 create: { sessionId: session.id, playerId: player.id, ...statsWithoutPosition }
-                            })
-                        );
-                        processedRecords++;
+                            });
+                            processedRecords++;
+                        }));
                     }
-                    await Promise.all(sessionDataPromises);
                     // ──────────────────────────────────────────────────────────────────
 
                     // ─── OPTIMIZATION 3: Batch DrillData concurrently ─────────────────
@@ -265,22 +265,23 @@ export async function POST(req: Request) {
                         });
 
                         const specificDrillRows = drillRows.filter((r: any) => getValue(r, "BLOCK")?.toString().trim() === drillName);
-                        const drillDataPromises: Promise<any>[] = [];
-                        for (const row of specificDrillRows) {
-                            const playerName = getValue(row, "PLAYER");
-                            if (!playerName) continue;
-                            const p = playerCache.get(playerName.toLowerCase());
-                            if (p) {
-                                drillDataPromises.push(
-                                    prisma.drillData.upsert({
+                        
+                        // Batch DrillData to control concurrency
+                        for (let j = 0; j < specificDrillRows.length; j += BATCH_SIZE) {
+                            const batch = specificDrillRows.slice(j, j + BATCH_SIZE);
+                            await Promise.all(batch.map(async (row) => {
+                                const playerName = getValue(row, "PLAYER");
+                                if (!playerName) return;
+                                const p = playerCache.get(playerName.toLowerCase());
+                                if (p) {
+                                    await prisma.drillData.upsert({
                                         where: { drillId_playerId: { drillId: drill.id, playerId: p.id } },
                                         update: { total_distance: parseNum(getValue(row, "DISTANCE")), hsr_distance: parseNum(getValue(row, "HSR")), accelerations: Math.round(parseNum(getValue(row, "ACCEL"))), decelerations: Math.round(parseNum(getValue(row, "DECEL"))), top_speed: parseNum(getValue(row, "TOP_SPEED")), player_load: parseNum(getValue(row, "HMLD")), minutes: parseNum(getValue(row, "MINUTES")) },
                                         create: { drillId: drill.id, playerId: p.id, total_distance: parseNum(getValue(row, "DISTANCE")), hsr_distance: parseNum(getValue(row, "HSR")), accelerations: Math.round(parseNum(getValue(row, "ACCEL"))), decelerations: Math.round(parseNum(getValue(row, "DECEL"))), top_speed: parseNum(getValue(row, "TOP_SPEED")), player_load: parseNum(getValue(row, "HMLD")), minutes: parseNum(getValue(row, "MINUTES")) }
-                                    })
-                                );
-                            }
+                                    });
+                                }
+                            }));
                         }
-                        await Promise.all(drillDataPromises);
                     }
                     // ──────────────────────────────────────────────────────────────────
                 }
@@ -289,11 +290,13 @@ export async function POST(req: Request) {
                 // Instead of 1 update per player during processing, batch at end.
                 if (topSpeedUpdates.size > 0) {
                     sendProgress(87, `Actualizando velocidades máximas (${topSpeedUpdates.size} jugadores)...`);
-                    await Promise.all(
-                        Array.from(topSpeedUpdates.entries()).map(([playerId, top_speed]) =>
+                    const speedEntries = Array.from(topSpeedUpdates.entries());
+                    for (let j = 0; j < speedEntries.length; j += BATCH_SIZE) {
+                        const batch = speedEntries.slice(j, j + BATCH_SIZE);
+                        await Promise.all(batch.map(([playerId, top_speed]) =>
                             prisma.player.update({ where: { id: playerId }, data: { top_speed_max: top_speed } })
-                        )
-                    );
+                        ));
+                    }
                 }
 
                 // ─── OPTIMIZATION 5: Deferred ACWR / Health metrics ───────────────────
@@ -311,9 +314,8 @@ export async function POST(req: Request) {
                 const { checkSpeedMaintenanceAlert } = await import("@/lib/metrics/speed-alerts");
 
                 let completed = 0;
-                const batchSize = 5; // Process 5 players at a time concurrently
-                for (let j = 0; j < playerArray.length; j += batchSize) {
-                    const batch = playerArray.slice(j, j + batchSize);
+                for (let j = 0; j < playerArray.length; j += BATCH_SIZE) {
+                    const batch = playerArray.slice(j, j + BATCH_SIZE);
                     await Promise.all(batch.map(async (pid) => {
                         try {
                             await updatePlayerStatus(pid);
