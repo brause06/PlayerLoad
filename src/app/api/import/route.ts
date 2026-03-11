@@ -5,20 +5,22 @@ import { updatePlayerStatus } from "@/lib/metrics/acwr";
 import { checkSession } from "@/lib/api-protection";
 
 const COLUMN_MAPPINGS: Record<string, string[]> = {
-    PLAYER: ["JUGADOR", "PLAYER", "Athlete"],
-    BLOCK: ["BLOCK_NAME", "BLOCK NAME", "Period Name", "Period"],
-    TYPE: ["SESSION_TYPE", "SESSION TYPE", "Type"],
-    MINUTES: ["MINUTES", "Minutes", "DURATION", "Duration", "Minutos"],
-    DISTANCE: ["TOTAL_DISTANCE", "TOTAL DISTANCE", "Distance", "Distancia"],
+    PLAYER: ["JUGADOR", "PLAYER", "Athlete", "Nombre Completo"],
+    FIRST_NAME: ["NOMBRE", "First Name", "Nombre"],
+    LAST_NAME: ["APELLIDO", "Last Name", "Apellido"],
+    BLOCK: ["BLOCK_NAME", "BLOCK NAME", "Period Name", "Period", "BLOQUE"],
+    TYPE: ["SESSION_TYPE", "SESSION TYPE", "Type", "TIPO"],
+    MINUTES: ["MINUTES", "Minutes", "DURATION", "Duration", "Minutos", "MIN"],
+    DISTANCE: ["TOTAL_DISTANCE", "TOTAL DISTANCE", "Distance", "Distancia", "TOTAL DISTANCE (m)"],
     HSR: ["HSR", "HSR DISTANCE", "HSR (m)", "High Speed Running"],
     ACCEL: ["ACCEL", "ACCELERATIONS", "Accelerations", "Aceleraciones"],
     DECEL: ["DECEL", "DECELERATIONS", "Decelerations", "Deceleraciones"],
-    TOP_SPEED: ["TOP_SPEED", "TOP SPEED", "Max Speed", "Peak Velocity", "Velocidad Máxima"],
-    HMLD: ["HMLD", "PLAYER_LOAD", "PLAYER LOAD", "Load", "Dynamic Stress Load"],
-    POSITION: ["POSITION", "Position", "Posición"],
+    TOP_SPEED: ["TOP_SPEED", "TOP SPEED", "Max Speed", "Peak Velocity", "Velocidad Máxima", "TOP SPEED (km/h)"],
+    HMLD: ["HMLD", "PLAYER_LOAD", "PLAYER LOAD", "Load", "Dynamic Stress Load", "HMLD (m)"],
+    POSITION: ["POSITION", "Position", "Posición", "Posicion"],
     DATE: ["SESSION_DATE", "SESSION DATE", "Date", "Fecha"],
-    MICROCYCLE: ["MD", "Microcycle", "Microciclo"],
-    OPPONENT: ["OPPONENT", "Opponent", "Oponente"],
+    MICROCYCLE: ["MD", "Microcycle", "Microciclo", "Micro"],
+    OPPONENT: ["OPPONENT", "Opponent", "Oponente", "Rival"],
     MATCH_MINUTES: ["MINUTOS DE JUEGO EN PARTIDO", "MATCH_MINUTES", "Game Minutes", "Playing Time"]
 };
 
@@ -146,12 +148,11 @@ export async function POST(req: Request) {
                     const microcycle = getValue(dayRows[0], "MICROCYCLE") || null;
                     const opponent = getValue(dayRows[0], "OPPONENT") || null;
 
-                    // Detect evaluation mode by session type OR by presence of "Max Speed" column
-                    const hasMaxSpeedColumn = dayRows.some((r: any) => 
-                        r["Max Speed"] !== undefined || 
-                        r["Velocidad Máxima"] !== undefined ||
-                        r["MAX_SPEED"] !== undefined
-                    );
+                    // Improved detection of "Max Speed" column to trigger evaluation mode
+                    const hasMaxSpeedColumn = dayRows.some((r: any) => {
+                        const keys = Object.keys(r).map(k => k.trim().toUpperCase());
+                        return keys.includes("MAX SPEED") || keys.includes("VELOCIDAD MÁXIMA") || keys.includes("MAX_SPEED");
+                    });
 
                     const isEvaluation = sessionType.includes("EVAL") || 
                                          sessionType.includes("TEST") || 
@@ -205,9 +206,22 @@ export async function POST(req: Request) {
 
                     // Build playerSessionDataMap (unchanged)
                     const playerSessionDataMap = new Map<string, any>();
+                    
+                    const resolvePlayerName = (row: any) => {
+                        const direct = getValue(row, "PLAYER");
+                        if (direct) return direct;
+                        
+                        const first = getValue(row, "FIRST_NAME");
+                        const last = getValue(row, "LAST_NAME");
+                        if (first && last) return `${first} ${last}`.trim();
+                        if (first) return first;
+                        if (last) return last;
+                        return null;
+                    };
+
                     if (fullSessionRows.length > 0) {
                         for (const row of fullSessionRows) {
-                            const playerName = getValue(row, "PLAYER");
+                            const playerName = resolvePlayerName(row);
                             if (!playerName) continue;
                             playerSessionDataMap.set(playerName, {
                                 total_distance: parseNum(getValue(row, "DISTANCE")),
@@ -223,7 +237,7 @@ export async function POST(req: Request) {
                         }
                     } else if (drillRows.length > 0) {
                         for (const row of drillRows) {
-                            const playerName = getValue(row, "PLAYER");
+                            const playerName = resolvePlayerName(row);
                             if (!playerName) continue;
 
                             let top_speed = parseNum(getValue(row, "TOP_SPEED"));
