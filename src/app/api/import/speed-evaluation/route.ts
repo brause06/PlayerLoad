@@ -57,10 +57,34 @@ export async function POST(req: Request) {
                     select: { id: true, name: true, gps_id: true, top_speed_max: true }
                 });
 
+                // Normalization helper
+                const normalizeStr = (str: string | null | undefined) => {
+                    if (!str) return "";
+                    return str
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "") // Remove accents
+                        .replace(/[^a-zA-Z0-9]/g, "")    // Remove spaces and special chars (like '?')
+                        .toLowerCase();
+                };
+
                 const playerCache = new Map<string, typeof allPlayers[0]>();
                 for (const p of allPlayers) {
-                    if (p.gps_id) playerCache.set(p.gps_id.toLowerCase(), p);
-                    if (p.name) playerCache.set(p.name.toLowerCase(), p);
+                    if (p.gps_id) playerCache.set(normalizeStr(p.gps_id), p);
+                    
+                    if (p.name) {
+                        const norm = normalizeStr(p.name);
+                        playerCache.set(norm, p);
+                        
+                        // Also store inverted if there's a space in the original db name
+                        const parts = p.name.split(/\s+/);
+                        if (parts.length > 1) {
+                            const invertedStr = parts.slice(1).join("") + parts[0];
+                            const normInverted = normalizeStr(invertedStr);
+                            if (normInverted !== norm) {
+                                playerCache.set(normInverted, p);
+                            }
+                        }
+                    }
                 }
 
                 const totalRows = rows.length;
@@ -71,16 +95,29 @@ export async function POST(req: Request) {
                     const row = rows[i];
                     
                     // Resolve Name
-                    let playerName = getValue(row, "PLAYER");
-                    if (!playerName) {
+                    let importedFullName = getValue(row, "PLAYER");
+                    let directNorm = "";
+                    let invertedNorm = "";
+
+                    if (!importedFullName) {
                         const first = getValue(row, "FIRST_NAME");
                         const last = getValue(row, "LAST_NAME");
-                        if (first && last) playerName = `${first} ${last}`.trim();
-                        else if (first) playerName = first;
-                        else if (last) playerName = last;
+                        if (first && last) {
+                            importedFullName = `${first} ${last}`.trim();
+                            directNorm = normalizeStr(first) + normalizeStr(last);
+                            invertedNorm = normalizeStr(last) + normalizeStr(first);
+                        }
+                        else if (first) { importedFullName = first; directNorm = normalizeStr(first); }
+                        else if (last) { importedFullName = last; directNorm = normalizeStr(last); }
+                    } else {
+                        directNorm = normalizeStr(importedFullName.toString());
+                        const parts = importedFullName.toString().split(/\s+/);
+                        if (parts.length > 1) {
+                            invertedNorm = normalizeStr(parts.slice(1).join("") + parts[0]);
+                        }
                     }
 
-                    if (!playerName) continue;
+                    if (!importedFullName) continue;
 
                     let topSpeed = parseNum(getValue(row, "TOP_SPEED"));
                     // Fallback to 30 km/h if 0 or missing
@@ -89,8 +126,13 @@ export async function POST(req: Request) {
                     // Process km/h vs m/s
                     if (topSpeed > 0 && topSpeed < 15) topSpeed = Math.round(topSpeed * 3.6 * 10) / 10;
 
-                    const key = playerName.toString().toLowerCase();
-                    const player = playerCache.get(key);
+                    // Try to find player in cache
+                    let player = playerCache.get(directNorm) || playerCache.get(invertedNorm);
+                    
+                    // Fallback to exact gps_id match if somehow provided in standard columns
+                    if (!player && row.gps_id) {
+                         player = playerCache.get(normalizeStr(row.gps_id));
+                    }
 
                     if (player) {
                         const currentMax = player.top_speed_max || 0;
@@ -105,8 +147,8 @@ export async function POST(req: Request) {
                         // Create new player with 30 fallback or imported speed
                         await prisma.player.create({
                             data: {
-                                name: playerName.toString(),
-                                gps_id: playerName.toString(),
+                                name: importedFullName.toString(),
+                                gps_id: importedFullName.toString(),
                                 position: getValue(row, "POSITION") || "Unknown",
                                 top_speed_max: topSpeed
                             }
@@ -117,7 +159,7 @@ export async function POST(req: Request) {
                     processed++;
                     if (i % 5 === 0 || i === totalRows - 1) {
                         const p = 10 + (processed / totalRows) * 85;
-                        sendProgress(p, `Actualizando: ${playerName}...`);
+                        sendProgress(p, `Actualizando: ${importedFullName}...`);
                     }
                 }
 
