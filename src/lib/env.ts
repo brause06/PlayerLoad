@@ -11,6 +11,7 @@ const envSchema = z.object({
     // Optional but recommended OAuth
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    ALLOWED_GOOGLE_DOMAIN: z.string().optional(),
 
     // Email (Nodemailer/Transactional)
     GMAIL_USER: z.string().optional(),

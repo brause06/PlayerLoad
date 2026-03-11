@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 import { Providers } from "./providers";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "LoadTrack Rugby",
@@ -30,6 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>{children}</Providers>
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );

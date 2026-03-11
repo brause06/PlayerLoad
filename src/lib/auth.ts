@@ -47,11 +47,19 @@ export const authOptions: NextAuthOptions = {
         }),
     ],
     callbacks: {
+        async signIn({ account, profile }) {
+            if (account?.provider === "google" && env.ALLOWED_GOOGLE_DOMAIN) {
+                if (!profile?.email?.endsWith(`@${env.ALLOWED_GOOGLE_DOMAIN}`)) {
+                    return false;
+                }
+            }
+            return true;
+        },
         session: ({ session, token }) => {
             if (token && session.user) {
                 session.user.id = token.id as string;
-                session.user.role = token.role as string;
-                (session.user as any).playerId = token.playerId;
+                session.user.role = token.role as any;
+                session.user.playerId = token.playerId as string | null | undefined;
             }
             return session;
         },

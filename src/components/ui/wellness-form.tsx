@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { HeartPulse, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { HeartPulse, CheckCircle2, ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { toast } from "sonner";
+import { format } from "date-fns";
 
 export function WellnessForm() {
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -17,7 +19,6 @@ export function WellnessForm() {
   const [stress, setStress] = useState(5); 
   const [fatigue, setFatigue] = useState(5); 
   const [muscleSoreness, setMuscleSoreness] = useState(5); 
-  const [statusScore, setStatusScore] = useState(8); 
   const [comments, setComments] = useState("");
   const [jointPainMap, setJointPainMap] = useState<Record<string, number>>({});
   const [musclePainMap, setMusclePainMap] = useState<string[]>([]);
@@ -56,7 +57,6 @@ export function WellnessForm() {
             setStress(data.record.stress);
             setFatigue(data.record.fatigue);
             setMuscleSoreness(data.record.muscleSoreness);
-            setStatusScore(data.record.statusScore);
             setComments(data.record.comments || "");
             setJointPainMap(data.record.jointPainMap || {});
             setMusclePainMap(data.record.musclePainMap || []);
@@ -87,7 +87,6 @@ export function WellnessForm() {
           stress,
           fatigue,
           muscleSoreness,
-          statusScore,
           comments,
           jointPainMap,
           musclePainMap
@@ -98,9 +97,10 @@ export function WellnessForm() {
       
       setIsSubmitted(true);
       setIsExpanded(false);
+      toast.success("Wellness guardado correctamente");
     } catch (err) {
       console.error(err);
-      alert("Something went wrong saving your wellness data. Please try again.");
+      toast.error("Error al guardar wellness. Intentalo de nuevo.");
     } finally {
       setIsSubmitting(false);
     }
@@ -173,7 +173,10 @@ export function WellnessForm() {
             </div>
             <div>
                 <CardTitle className="text-sm font-bold text-white tracking-widest uppercase">Daily Check-in</CardTitle>
-                <p className="text-[10px] text-indigo-400 font-bold tracking-widest uppercase">{isSubmitted ? "Update your metrics" : "Required morning wellness"}</p>
+                <div className="flex items-center gap-1.5 text-[10px] text-indigo-400 font-bold tracking-widest uppercase">
+                  <Calendar className="h-3 w-3" />
+                  <span>{format(new Date(), "EEEE, d 'de' MMMM")}</span>
+                </div>
             </div>
         </div>
         {isExpanded ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}

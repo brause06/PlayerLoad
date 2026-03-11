@@ -3,6 +3,8 @@ import { logger } from "@/lib/logger";
 import prisma from "@/lib/prisma";
 import nodemailer from "nodemailer";
 
+let cachedTransporter: nodemailer.Transporter | null = null;
+
 /**
  * Service to handle dispatching emails using Gmail SMTP (or similar).
  * Uses validated environment variables.
@@ -26,17 +28,19 @@ export async function sendEmailNotification(subject: string, message: string) {
             return;
         }
 
-        // Create transporter
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: gmailUser,
-                pass: gmailPass,
-            },
-        });
+        // Create or reuse transporter
+        if (!cachedTransporter) {
+            cachedTransporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: gmailUser,
+                    pass: gmailPass,
+                },
+            });
+        }
 
         // Send mail
-        const info = await transporter.sendMail({
+        const info = await cachedTransporter.sendMail({
             from: `"LoadTrack Rugby" <${gmailUser}>`,
             to: targetEmail,
             subject: subject,

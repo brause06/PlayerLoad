@@ -18,7 +18,7 @@ export async function GET(request: Request, context: any) {
         const player = await prisma.player.findUnique({
             where: { id },
             include: {
-                user: true,
+                user: { select: { id: true, email: true, role: true } },
                 sessions: {
                     include: {
                         session: true,
@@ -173,6 +173,12 @@ export async function PATCH(request: Request, context: any) {
             age, weight, team, status, injury_history,
             height, dob, contract_end, blood_type, emergency_contact
         } = body;
+
+        // Whitelist valid status values
+        const VALID_STATUSES = ["ACTIVE", "MODIFIED", "INJURED", "REST", "HIGH", "OPTIMAL", "LOW"];
+        if (status !== undefined && !VALID_STATUSES.includes(status)) {
+            return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` }, { status: 400 });
+        }
 
         const updatedPlayer = await prisma.player.update({
             where: { id },

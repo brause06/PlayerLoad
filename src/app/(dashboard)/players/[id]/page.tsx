@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from "recharts";
+import { toast } from "sonner";
 
 export default function PlayerProfilePage() {
   const params = useParams();
@@ -119,10 +120,10 @@ export default function PlayerProfilePage() {
         alert(data.message || "Account managed successfully.");
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to manage account.");
+        toast.error(err.error || "Error al gestionar la cuenta.");
       }
     } catch (err) {
-      alert("Network error occurred.");
+      toast.error("Ocurrió un error de red.");
     } finally {
       setAccountSaving(false);
     }
@@ -160,19 +161,20 @@ export default function PlayerProfilePage() {
         console.log("Successfully updated player:", updated);
         setPlayer({ ...player, ...updated });
         setIsEditing(false);
+        toast.success("Perfil actualizado con éxito");
       } else {
         const errorText = await res.text();
         console.error("Server returned error:", res.status, errorText);
-        let errorMessage = "Failed to save changes.";
+        let errorMessage = "Error al guardar los cambios.";
         try {
           const errorJson = JSON.parse(errorText);
           errorMessage = errorJson.error || errorMessage;
         } catch (e) {}
-        alert(`Error: ${errorMessage}`);
+        toast.error(`Error: ${errorMessage}`);
       }
     } catch (err) {
       console.error("Network or catch-all error:", err);
-      alert("A network error occurred while saving.");
+      toast.error("Error de red al intentar guardar.");
     } finally {
       setSaveLoading(false);
     }

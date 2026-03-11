@@ -7,20 +7,22 @@ import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "./NotificationBell";
 
-export function Sidebar() {
+export function SidebarContent() {
   const pathname = usePathname();
   const { data: session } = useSession();
 
   return (
-    <aside className="w-64 h-full bg-[#131313] text-slate-300 border-r border-neutral-800 flex flex-col hidden md:flex">
+    <div className="flex flex-col h-full">
       <div className="p-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <Activity className="h-6 w-6 text-indigo-500" />
           LoadTrack
         </h1>
-        <NotificationBell />
+        <div className="md:block hidden">
+          <NotificationBell />
+        </div>
       </div>
-      <nav className="flex-1 px-4 space-y-2 mt-4">
+      <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
         {session?.user?.role === "PLAYER" ? (
             <Link 
               href="/my-stats"
@@ -92,7 +94,7 @@ export function Sidebar() {
       </nav>
       <div className="p-4 border-t border-neutral-800">
         <div className="text-sm font-medium mb-1 truncate text-white uppercase tracking-wide">
-          {session?.user?.name || "Loading..."}
+          {session?.user?.name || session?.user?.email?.split('@')[0] || "User"}
         </div>
         <div className="text-[10px] text-slate-500 mb-3 uppercase tracking-widest font-bold">
           {session?.user?.role?.toLowerCase() || "Staff"}
@@ -107,6 +109,14 @@ export function Sidebar() {
           Sign out
         </Button>
       </div>
+    </div>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <aside className="w-64 h-full bg-[#131313] text-slate-300 border-r border-neutral-800 flex flex-col hidden md:flex">
+      <SidebarContent />
     </aside>
   );
 }

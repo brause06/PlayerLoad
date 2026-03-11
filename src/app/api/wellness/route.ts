@@ -20,7 +20,6 @@ export async function POST(req: Request) {
             stress,
             fatigue,
             muscleSoreness,
-            statusScore,
             comments,
             jointPainMap,
             musclePainMap
@@ -43,7 +42,7 @@ export async function POST(req: Request) {
 
         const today = startOfDay(new Date());
 
-        // Upsert the wellness record so players can correct a mistake made today
+        // Upsert the wellness record. statusScore is now set to fatigue to maintain DB consistency
         const wellnessRecord = await prisma.wellness.upsert({
             where: {
                 playerId_date: {
@@ -58,7 +57,7 @@ export async function POST(req: Request) {
                 stress,
                 fatigue,
                 muscleSoreness,
-                statusScore,
+                statusScore: fatigue, 
                 comments,
                 jointPainMap,
                 musclePainMap
@@ -72,24 +71,20 @@ export async function POST(req: Request) {
                 stress,
                 fatigue,
                 muscleSoreness,
-                statusScore,
+                statusScore: fatigue,
                 comments,
                 jointPainMap,
                 musclePainMap
             },
         });
 
-        // --- Automate Status/Alert Updates ---
         const { checkWellnessAlerts } = await import("@/lib/metrics/wellness-alerts");
         await checkWellnessAlerts(sessionUser.playerId);
 
         return NextResponse.json({ success: true, record: wellnessRecord }, { status: 200 });
     } catch (error) {
         console.error("Error saving wellness:", error);
-        return NextResponse.json(
-            { error: "Failed to save wellness data" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to save wellness data" }, { status: 500 });
     }
 }
 
@@ -119,12 +114,7 @@ export async function GET(req: Request) {
         } else {
             return NextResponse.json({ hasSubmitted: false }, { status: 200 });
         }
-
     } catch (error) {
-        console.error("Error fetching wellness:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch wellness data" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to fetch wellness data" }, { status: 500 });
     }
 }

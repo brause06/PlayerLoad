@@ -109,6 +109,18 @@ export default function DashboardPage() {
               <div className="h-[300px] flex items-center justify-center">
                 <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-500" />
               </div>
+            ) : data?.totalPlayers === 0 ? (
+               <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-neutral-800 rounded-3xl bg-[#0d0d0d]">
+                  <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mb-4">
+                    <Activity className="h-8 w-8 text-indigo-400" />
+                  </div>
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter">Bienvenido a RugbyLoad</h3>
+                  <p className="text-sm text-slate-400 mt-2 max-w-[280px]">Parece que aún no hay datos. Empecemos configurando tu equipo.</p>
+                  <div className="flex gap-4 mt-8">
+                    <a href="/import" className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full text-xs font-black uppercase tracking-widest transition-all">Importar GPS</a>
+                    <a href="/players" className="px-6 py-2 bg-[#1a1a1a] hover:bg-[#222] border border-neutral-800 text-slate-300 rounded-full text-xs font-black uppercase tracking-widest transition-all">Ver Plantel</a>
+                  </div>
+               </div>
             ) : data?.loadTrend && data.loadTrend.length > 0 ? (
               <div className="h-[300px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">

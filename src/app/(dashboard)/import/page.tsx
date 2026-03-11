@@ -7,6 +7,7 @@ import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronRight, Che
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "sonner";
 
 function ImportInterface() {
   const [dragActive, setDragActive] = useState(false);
@@ -45,7 +46,7 @@ function ImportInterface() {
           }
         },
         error: (error) => {
-          alert("Failed to parse CSV: " + error.message);
+          toast.error("Error al procesar CSV: " + error.message);
         }
       });
     } else if (fileExt === 'xlsx' || fileExt === 'xls') {
@@ -63,10 +64,10 @@ function ImportInterface() {
             setParsedHeaders(Object.keys(json[0]));
             setParsedRows(json);
           } else {
-            alert("The Excel file seems to be empty.");
+            toast.error("El archivo Excel parece estar vacío.");
           }
         } catch (error) {
-          alert("Failed to parse Excel file.");
+          toast.error("Error al procesar el archivo Excel.");
         }
       };
       reader.readAsArrayBuffer(selectedFile);
@@ -80,11 +81,17 @@ function ImportInterface() {
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
+      
+      if (droppedFile.size > 10 * 1024 * 1024) {
+        toast.error("El archivo es demasiado grande (Máx 10MB)");
+        return;
+      }
+
       const name = droppedFile.name.toLowerCase();
       if (droppedFile.type === "text/csv" || name.endsWith(".csv") || name.endsWith(".xlsx") || name.endsWith(".xls")) {
         processFile(droppedFile);
       } else {
-        alert("Please upload a valid CSV or Excel (.xlsx) file");
+        toast.error("Por favor, sube un archivo CSV o Excel (.xlsx) válido");
       }
     }
   };
@@ -92,7 +99,12 @@ function ImportInterface() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        toast.error("El archivo es demasiado grande (Máx 10MB)");
+        return;
+      }
+      processFile(selectedFile);
     }
   };
 

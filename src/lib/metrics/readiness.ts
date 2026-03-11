@@ -2,24 +2,15 @@ import prisma from "@/lib/prisma";
 import { getCachedMetrics, setCachedMetrics } from "@/lib/cache/metrics-cache";
 
 /**
- * Calculates a weighted Readiness score (1-10) for a wellness record.
- * Uses weights from system settings if available.
+ * Synchronous version of readiness calculation that accepts system settings.
+ * Use this when you've already fetched systemSettings to avoid duplicate DB calls.
  */
-export async function calculateWeightedReadiness(wellness: any) {
-    let settings = getCachedMetrics<any[]>("system_settings");
-
-    if (!settings) {
-        settings = await prisma.systemSettings.findMany();
-        setCachedMetrics("system_settings", settings);
-    }
-
-    const settingsList = settings || [];
-
-    const wSleep = parseInt(settingsList.find((s: any) => s.key === "weight_sleep")?.value || "3", 10);
-    const wEnergy = parseInt(settingsList.find((s: any) => s.key === "weight_energy")?.value || "2", 10);
-    const wFatigue = parseInt(settingsList.find((s: any) => s.key === "weight_fatigue")?.value || "2", 10);
-    const wSoreness = parseInt(settingsList.find((s: any) => s.key === "weight_soreness")?.value || "3", 10);
-    const wStress = parseInt(settingsList.find((s: any) => s.key === "weight_stress")?.value || "2", 10);
+export function calculateWeightedReadinessSync(wellness: any, systemSettingsList: any[]) {
+    const wSleep = parseInt(systemSettingsList.find((s: any) => s.key === "weight_sleep")?.value || "3", 10);
+    const wEnergy = parseInt(systemSettingsList.find((s: any) => s.key === "weight_energy")?.value || "2", 10);
+    const wFatigue = parseInt(systemSettingsList.find((s: any) => s.key === "weight_fatigue")?.value || "2", 10);
+    const wSoreness = parseInt(systemSettingsList.find((s: any) => s.key === "weight_soreness")?.value || "3", 10);
+    const wStress = parseInt(systemSettingsList.find((s: any) => s.key === "weight_stress")?.value || "2", 10);
 
     const totalWeight = wSleep + wEnergy + wFatigue + wSoreness + wStress;
 
@@ -41,4 +32,19 @@ export async function calculateWeightedReadiness(wellness: any) {
     const readiness = weightedSum / totalWeight;
 
     return Math.round(readiness * 10) / 10;
+}
+
+/**
+ * Calculates a weighted Readiness score (1-10) for a wellness record.
+ * Fetches weights from system settings if available.
+ */
+export async function calculateWeightedReadiness(wellness: any) {
+    let settings = getCachedMetrics<any[]>("system_settings");
+
+    if (!settings) {
+        settings = await prisma.systemSettings.findMany();
+        setCachedMetrics("system_settings", settings);
+    }
+
+    return calculateWeightedReadinessSync(wellness, settings || []);
 }

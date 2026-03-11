@@ -1,16 +1,25 @@
 import NextAuth, { DefaultSession } from "next-auth";
 
-// NextAuth type augmentation to include `id` and `role` properties
 declare module "next-auth" {
     interface Session {
         user: {
             id: string;
             role?: string;
+            playerId?: string | null;
         } & DefaultSession["user"];
     }
 
     interface User {
         id: string;
         role?: string;
+        playerId?: string | null;
+    }
+}
+
+declare module "next-auth/jwt" {
+    interface JWT {
+        id: string;
+        role?: string;
+        playerId?: string | null;
     }
 }
