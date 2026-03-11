@@ -171,7 +171,7 @@ export async function PATCH(request: Request, context: any) {
         const body = await request.json();
         const {
             age, weight, team, status, injury_history,
-            height, dob, contract_end, blood_type, emergency_contact
+            height, dob, contract_end, blood_type, emergency_contact, top_speed_max
         } = body;
 
         // Whitelist valid status values
@@ -193,6 +193,7 @@ export async function PATCH(request: Request, context: any) {
                 injury_history,
                 blood_type,
                 emergency_contact,
+                top_speed_max: top_speed_max !== undefined ? (top_speed_max === "" ? null : Number(top_speed_max)) : undefined,
             },
         });
 

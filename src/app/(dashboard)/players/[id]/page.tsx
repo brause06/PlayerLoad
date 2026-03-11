@@ -45,7 +45,8 @@ export default function PlayerProfilePage() {
     contract_end: "",
     status: "",
     injury_history: "",
-    emergency_contact: ""
+    emergency_contact: "",
+    top_speed_max: ""
   });
 
   useEffect(() => {
@@ -141,7 +142,8 @@ export default function PlayerProfilePage() {
         contract_end: player.contract_end ? player.contract_end.split('T')[0] : "",
         status: player.status || "ACTIVE",
         injury_history: player.injury_history || "",
-        emergency_contact: player.emergency_contact || ""
+        emergency_contact: player.emergency_contact || "",
+        top_speed_max: player.top_speed_max?.toString() || ""
       });
     }
   }, [player]);
@@ -635,7 +637,7 @@ export default function PlayerProfilePage() {
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4 pt-2">
+                     <div className="grid grid-cols-2 gap-4 pt-2">
                        <div className="space-y-1">
                          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">Age</span>
                          {isEditing ? (
@@ -645,24 +647,37 @@ export default function PlayerProfilePage() {
                          )}
                        </div>
                        <div className="space-y-1">
-                         <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">Blood Type</span>
+                         <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">Max Speed (km/h)</span>
+                         {isEditing ? (
+                           <Input className="h-8 bg-neutral-900 border-neutral-800 text-xs text-amber-500 font-bold placeholder:text-neutral-700" type="number" step="0.1" value={formData.top_speed_max} onChange={(e) => setFormData({ ...formData, top_speed_max: e.target.value })} />
+                         ) : (
+                           <div className="flex items-end gap-1">
+                              <span className="text-xl font-black text-amber-500 tracking-tighter">{player.top_speed_max || "--"}</span>
+                              <span className="text-[10px] text-amber-500/70 pb-1 font-bold">km/h</span>
+                           </div>
+                         )}
+                       </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-neutral-800/50 flex justify-between gap-4">
+                       <div className="flex-1">
+                         <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block mb-1">Date of Birth</span>
+                         {isEditing ? (
+                           <Input className="h-8 bg-neutral-900 border-neutral-800 text-xs text-white font-bold" type="date" value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
+                         ) : (
+                           <span className="text-sm font-medium text-slate-300">
+                             {player.dob ? format(new Date(player.dob), "PPP") : "Not Set"}
+                           </span>
+                         )}
+                       </div>
+                       <div className="flex-1">
+                         <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block mb-1">Blood Type</span>
                          {isEditing ? (
                            <Input className="h-8 bg-neutral-900 border-neutral-800 text-xs text-white font-bold placeholder:text-neutral-700" value={formData.blood_type} onChange={(e) => setFormData({ ...formData, blood_type: e.target.value })} />
                          ) : (
                            <Badge variant="outline" className="bg-[#1a1a1a] border-neutral-800 text-slate-300 font-bold">{player.blood_type || "N/A"}</Badge>
                          )}
                        </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-neutral-800/50">
-                       <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block mb-1">Date of Birth</span>
-                       {isEditing ? (
-                         <Input className="h-8 bg-neutral-900 border-neutral-800 text-xs text-white font-bold" type="date" value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
-                       ) : (
-                         <span className="text-sm font-medium text-slate-300">
-                           {player.dob ? format(new Date(player.dob), "PPP") : "Not Set"}
-                         </span>
-                       )}
                     </div>
                  </CardContent>
                </Card>
