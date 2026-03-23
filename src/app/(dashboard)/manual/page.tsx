@@ -48,7 +48,7 @@ export default function ManualPage() {
           <CardContent className="space-y-4 text-sm text-slate-300">
             <p>Esta sección consolida la información de GPS (Carga extrínseca) con la del reporte de wellness diario (Carga intrínseca y dolores) para determinar si un jugador está listo para entrenar.</p>
             <ul className="list-disc pl-5 space-y-2 mt-2">
-              <li><strong className="text-white">ACWR (Acute:Chronic Workload Ratio):</strong> Es la división entre la carga de la última semana (Aguda) vs el promedio de las últimas 4 semanas (Crónica). Un valor entre <strong>0.8 y 1.3 es OPITMO</strong> (Verde/Green). Un valor de <strong>> 1.5 es PELIGROSO</strong> (Rojo/Out) e indica un riesgo inminente de lesión por pico de carga.</li>
+              <li><strong className="text-white">ACWR (Acute:Chronic Workload Ratio):</strong> Es la división entre la carga de la última semana (Aguda) vs el promedio de las últimas 4 semanas (Crónica). Un valor entre <strong>0.8 y 1.3 es OPITMO</strong> (Verde/Green). Un valor de <strong>&gt; 1.5 es PELIGROSO</strong> (Rojo/Out) e indica un riesgo inminente de lesión por pico de carga.</li>
               <li><strong className="text-white">Wellness (WEL):</strong> Puntaje del 1 al 100 basado en el formulario subjetivo que llena el jugador desde su celular cada mañana (Sueño, Estrés, Fatiga y Dolencias Musculares).</li>
               <li><strong className="text-white">Categorías de Estatus:</strong> 
                 <br/>- <span className="text-emerald-400">Green (Optimal):</span> Listo para el 100% de intensidad.
@@ -92,7 +92,7 @@ export default function ManualPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-slate-300">
              <ul className="list-disc pl-5 space-y-2 mt-2">
-              <li><strong className="text-white">Importar Sesión General:</strong> Para cargar Data de sesión común, dirígete a `Import Data` -> `Session Dataset (STATSports/Catapult)`. Seleccionás la fecha, el tipo de sesión y subes el archivo CSV con los cortes deseados.</li>
+              <li><strong className="text-white">Importar Sesión General:</strong> Para cargar Data de sesión común, dirígete a `Import Data` -&gt; `Session Dataset (STATSports/Catapult)`. Seleccionás la fecha, el tipo de sesión y subes el archivo CSV con los cortes deseados.</li>
               <li><strong className="text-white">Importar Speed Evaluation:</strong> En el área roja de la solapa `Import`, puedes ingresar periódicamente un CSV de "Speed Evaluations". El sistema inteligente va a leer todas las velocidades máximas del Excel (Top Speed), identificar fonéticamente al jugador evitando duplicados y —solamente si su nueva velocidad es mayor a la anterior— quedará guardado su nuevo registro récord en el Perfil del Jugador. Esta información es crucial para establecer la línea base del 100% de cada jugador en los reportes de Exposición Acumulada.</li>
             </ul>
           </CardContent>
