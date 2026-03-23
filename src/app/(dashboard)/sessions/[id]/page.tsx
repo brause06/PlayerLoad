@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Activity, Users, Clock, AlertCircle, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, ReferenceLine, ZAxis, Cell } from "recharts";
 import Link from "next/link";
 
 export default function SessionDetailPage() {
@@ -150,6 +150,75 @@ export default function SessionDetailPage() {
           </CardContent>
         </Card>
 
+        {/* HSR VS ACCEL QUADRANT */}
+        <Card className="bg-[#111111] shadow-sm border-neutral-800 col-span-1 md:col-span-2 lg:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-white font-bold uppercase tracking-widest text-sm">Player HSR vs ACCEL Quadrant</CardTitle>
+            <CardDescription className="text-slate-500">Distribution relative to Team Averages</CardDescription>
+          </CardHeader>
+          <CardContent>
+             <div className="h-[400px] w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 {(() => {
+                    const avgHSR = session.data.reduce((acc: number, d: any) => acc + d.hsr_distance, 0) / (session.data.length || 1);
+                    const avgAccel = session.data.reduce((acc: number, d: any) => acc + d.accelerations, 0) / (session.data.length || 1);
+                    
+                    const quadrantData = session.data.map((d: any) => ({
+                       x: d.hsr_distance,
+                       y: d.accelerations,
+                       z: 1,
+                       name: d.player.name,
+                       position: d.player.position,
+                       color: d.hsr_distance >= avgHSR && d.accelerations >= avgAccel ? '#10b981' : // Top Right
+                              d.hsr_distance >= avgHSR && d.accelerations < avgAccel ? '#3b82f6' :  // Bottom Right
+                              d.hsr_distance < avgHSR && d.accelerations >= avgAccel ? '#f59e0b' :  // Top Left
+                              '#ef4444' // Bottom Left
+                    }));
+
+                    return (
+                      <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: -20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+                        <XAxis type="number" dataKey="x" name="HSR" tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} tickLine={false} label={{ value: 'High Speed Running (m)', position: 'bottom', fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} />
+                        <YAxis type="number" dataKey="y" name="ACCEL" tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} tickLine={false} label={{ value: 'Accelerations', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} />
+                        <ZAxis type="number" dataKey="z" range={[60, 60]} />
+                        <Tooltip 
+                           cursor={{strokeDasharray: '3 3', stroke: '#525252'}}
+                           contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                           formatter={(value: any, name: any, props: any) => [value, name === 'x' ? 'HSR (m)' : 'Accelerations']}
+                           labelFormatter={() => ''}
+                           content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                 const data = payload[0].payload;
+                                 return (
+                                    <div className="bg-[#131313] p-3 rounded-xl border border-neutral-800 shadow-xl">
+                                      <p className="font-bold text-white mb-1">{data.name}</p>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{data.position}</p>
+                                      <div className="mt-2 text-xs space-y-1">
+                                        <p className="text-indigo-400 font-medium">HSR: <span className="font-bold">{data.x}m</span></p>
+                                        <p className="text-emerald-400 font-medium">Accel: <span className="font-bold">{data.y}</span></p>
+                                      </div>
+                                    </div>
+                                 );
+                              }
+                              return null;
+                           }}
+                        />
+                        <ReferenceLine x={avgHSR} stroke="#525252" strokeDasharray="3 3" label={{ value: 'Avg HSR', position: 'insideTopLeft', fill: '#737373', fontSize: 10, fontWeight: 'bold' }} />
+                        <ReferenceLine y={avgAccel} stroke="#525252" strokeDasharray="3 3" label={{ value: 'Avg ACCEL', position: 'insideBottomRight', fill: '#737373', fontSize: 10, fontWeight: 'bold' }} />
+                        
+                        <Scatter data={quadrantData} name="Players">
+                           {quadrantData.map((entry: any, index: number) => (
+                             <Cell key={`cell-${index}`} fill={entry.color} />
+                           ))}
+                        </Scatter>
+                      </ScatterChart>
+                    );
+                 })()}
+               </ResponsiveContainer>
+             </div>
+          </CardContent>
+        </Card>
+
         <Card className="bg-[#111111] shadow-sm border-neutral-800 col-span-1 md:col-span-2 lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-white font-bold uppercase tracking-widest text-sm">Drill Breakdown (Block HSR)</CardTitle>
@@ -158,26 +227,62 @@ export default function SessionDetailPage() {
           <CardContent>
              {session.drills && session.drills.length > 0 ? (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {session.drills.map((drill: any) => (
-                    <div key={drill.id} className="border border-neutral-800 rounded-xl p-4 bg-[#1a1a1a]">
-                      <h4 className="font-black text-white uppercase tracking-widest text-[10px] border-b border-neutral-800 pb-2 mb-3 truncate flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-indigo-400" />
-                        {drill.name}
-                      </h4>
-                      <div className="space-y-2">
-                        {drill.data.slice(0, 5).map((dd: any, idx: number) => (
-                          <div key={dd.id} className="flex justify-between items-center text-sm">
-                            <span className="text-slate-400 font-medium truncate mr-2" title={dd.player.name}>
-                              {idx + 1}. {dd.player.name}
-                            </span>
-                            <span className="font-bold tabular-nums text-indigo-400">
-                              {dd.hsr_distance}m
-                            </span>
+                  {session.drills.map((drill: any) => {
+                    const count = drill.data.length || 1;
+                    const avgHsr = drill.data.reduce((acc: number, d: any) => acc + (d.hsr_distance || 0), 0) / count;
+                    const avgAccel = drill.data.reduce((acc: number, d: any) => acc + (d.accelerations || 0), 0) / count;
+                    const avgDecel = drill.data.reduce((acc: number, d: any) => acc + (d.decelerations || 0), 0) / count;
+                    const avgHmld = drill.data.reduce((acc: number, d: any) => acc + (d.player_load || 0), 0) / count; // HMLD is stored inside player_load
+                    const avgDist = drill.data.reduce((acc: number, d: any) => acc + (d.total_distance || 0), 0) / count;
+                    const avgMins = drill.data.reduce((acc: number, d: any) => acc + (d.minutes || 0), 0) / count;
+                    
+                    const durationInMin = drill.duration || avgMins || 1;
+                    const mPerMin = avgDist / durationInMin;
+
+                    const blockChartData = [
+                      { name: 'HSR', value: Math.round(avgHsr), fill: '#818cf8' },
+                      { name: 'ACC', value: Math.round(avgAccel), fill: '#34d399' },
+                      { name: 'DEC', value: Math.round(avgDecel), fill: '#fb923c' },
+                      { name: 'HMLD', value: Math.round(avgHmld), fill: '#facc15' },
+                    ];
+
+                    return (
+                      <div key={drill.id} className="border border-neutral-800 rounded-xl p-4 bg-[#1a1a1a] flex flex-col">
+                        <div className="flex items-start justify-between border-b border-neutral-800 pb-2 mb-3">
+                          <h4 className="font-black text-white uppercase tracking-widest text-[10px] truncate flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-indigo-400" />
+                            {drill.name}
+                          </h4>
+                          <div className="text-right">
+                            <span className="block font-bold text-white text-sm tabular-nums">{Math.round(mPerMin)}</span>
+                            <span className="block text-[8px] text-slate-500 uppercase font-bold tracking-widest leading-none">m/min</span>
                           </div>
-                        ))}
+                        </div>
+                        
+                        <div className="h-[120px] w-full mt-2">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={blockChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
+                              <XAxis dataKey="name" tick={{fontSize: 9, fill: '#94a3b8', fontWeight: 'bold'}} tickLine={false} axisLine={false} />
+                              <YAxis tick={{fontSize: 9, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
+                              <Tooltip 
+                                 contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                                 labelStyle={{ display: 'none' }}
+                                 itemStyle={{ fontWeight: 'bold', fontSize: '12px' }}
+                                 formatter={(value: any, name: any, props: any) => [value, props.payload.name]}
+                                 cursor={{fill: '#222'}}
+                              />
+                              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                {blockChartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
              ) : (
                 <div className="text-center p-8 bg-[#1a1a1a] rounded-xl border border-dashed border-neutral-800 text-[10px] uppercase tracking-widest font-bold text-slate-600">

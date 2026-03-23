@@ -8,6 +8,7 @@ import { Search, Activity, Users } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { AddPlayerSheet } from "@/components/players/AddPlayerSheet";
+import { getPositionSortIndex } from "@/lib/constants";
 
 type Player = {
   id: string;
@@ -58,9 +59,9 @@ export default function PlayersPage() {
         groups[pos].push(p);
     });
     
-    // Optional: Sort groups alphabetically
+    // Sort groups using constant order
     const sortedGroups: Record<string, Player[]> = {};
-    Object.keys(groups).sort().forEach(k => {
+    Object.keys(groups).sort((a, b) => getPositionSortIndex(a) - getPositionSortIndex(b)).forEach(k => {
       sortedGroups[k] = groups[k];
     });
     

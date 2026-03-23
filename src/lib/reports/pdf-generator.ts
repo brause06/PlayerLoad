@@ -44,8 +44,31 @@ export const generateTeamReport = (data: any) => {
         headStyles: { fillColor: [79, 70, 229] as [number, number, number] },
     });
 
+    // Team Leaders Section
+    const lastY0 = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : 70;
+    doc.setFontSize(14);
+    doc.text('Team Leaders (Last 7 Days)', 14, lastY0 + 15);
+
+    const leaderHsr = data.teamLeaders?.hsr?.[0];
+    const leaderAccel = data.teamLeaders?.accel?.[0];
+    const leaderSpeed = data.teamLeaders?.topSpeed?.[0];
+
+    const leadersData = [
+        ['Highest HSR', leaderHsr ? `${leaderHsr.name} (${Math.round(leaderHsr.hsr)}m)` : 'N/A'],
+        ['Most Accelerations', leaderAccel ? `${leaderAccel.name} (${Math.round(leaderAccel.accel)})` : 'N/A'],
+        ['Peak Velocity', leaderSpeed ? `${leaderSpeed.name} (${Number(leaderSpeed.topSpeed7d).toFixed(1)} km/h)` : 'N/A'],
+    ];
+
+    autoTable(doc, {
+        startY: lastY0 + 20,
+        head: [['Category', 'Top Player']],
+        body: leadersData,
+        theme: 'striped',
+        headStyles: { fillColor: [16, 185, 129] as [number, number, number] }, // Emerald-500
+    });
+
     // Positional Averages Table
-    const lastY1 = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : 70;
+    const lastY1 = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : lastY0 + 60;
     doc.setFontSize(14);
     doc.text('Positional Averages', 14, lastY1 + 15);
 

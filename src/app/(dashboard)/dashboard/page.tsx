@@ -265,7 +265,11 @@ export default function DashboardPage() {
               ) : data?.weeklyTopSpeeds && data.weeklyTopSpeeds.length > 0 ? (
                 <div className="divide-y divide-neutral-800">
                   {data.weeklyTopSpeeds.map((player: any, i: number) => (
-                    <div key={player.id} className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors">
+                    <div 
+                      key={player.id} 
+                      className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors cursor-help"
+                      title={player.sessionDate ? `Alcanzado el ${new Date(player.sessionDate).toLocaleDateString()} en ${player.sessionType}` : 'Sesión desconocida'}
+                    >
                       <div className="flex items-center gap-3">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-amber-500 text-white shadow-sm' : i === 1 ? 'bg-amber-500/20 text-amber-500' : i === 2 ? 'bg-amber-500/10 text-amber-400' : 'bg-[#222] text-slate-500'}`}>
                           {i + 1}
@@ -305,7 +309,11 @@ export default function DashboardPage() {
               ) : data?.topSpeeds && data.topSpeeds.length > 0 ? (
                 <div className="divide-y divide-neutral-800">
                   {data.topSpeeds.map((player: any, i: number) => (
-                    <div key={player.id} className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors">
+                    <div 
+                      key={player.id} 
+                      className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors cursor-help"
+                      title={player.sessionDate ? `Alcanzado el ${new Date(player.sessionDate).toLocaleDateString()} en ${player.sessionType}` : 'Sesión desconocida'}
+                    >
                       <div className="flex items-center gap-3">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-[#222] text-slate-400`}>
                           {i + 1}

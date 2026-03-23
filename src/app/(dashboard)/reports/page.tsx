@@ -9,6 +9,7 @@ import { generateTeamReport, generatePlayerReport } from "@/lib/reports/pdf-gene
 
 export default function ReportsPage() {
   const [players, setPlayers] = useState<any[]>([]);
+  const [dashboardData, setDashboardData] = useState<any>(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [generatingTeam, setGeneratingTeam] = useState(false);
@@ -22,8 +23,14 @@ export default function ReportsPage() {
           const data = await res.json();
           setPlayers(data);
         }
+        
+        const dashRes = await fetch("/api/dashboard");
+        if (dashRes.ok) {
+           const dashData = await dashRes.json();
+           setDashboardData(dashData);
+        }
       } catch (err) {
-        console.error("Failed to load players", err);
+        console.error("Failed to load initial data", err);
       } finally {
         setLoadingPlayers(false);
       }
@@ -34,10 +41,14 @@ export default function ReportsPage() {
   const handleTeamReport = async () => {
     setGeneratingTeam(true);
     try {
-      const res = await fetch("/api/dashboard");
-      if (res.ok) {
-        const data = await res.json();
-        generateTeamReport(data);
+      if (dashboardData) {
+        generateTeamReport(dashboardData);
+      } else {
+        const res = await fetch("/api/dashboard");
+        if (res.ok) {
+          const data = await res.json();
+          generateTeamReport(data);
+        }
       }
     } catch (err) {
       console.error("Team report failed", err);
@@ -98,6 +109,29 @@ export default function ReportsPage() {
                 Injury Risk Identification (ACWR)
               </li>
             </ul>
+
+            {dashboardData?.teamLeaders && (
+              <div className="mt-6 p-4 rounded-xl bg-[#1a1a1a] border border-neutral-800">
+                 <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-3 block">7-Day Team Leaders</h4>
+                 <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                       <span className="text-xs text-slate-400 font-medium w-1/3">High Speed (m)</span>
+                       <span className="text-sm font-bold text-white flex-1">{dashboardData.teamLeaders.hsr?.[0]?.name || '--'}</span>
+                       <span className="text-xs font-bold text-indigo-400">{Math.round(dashboardData.teamLeaders.hsr?.[0]?.hsr || 0)}m</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                       <span className="text-xs text-slate-400 font-medium w-1/3">Accelerations</span>
+                       <span className="text-sm font-bold text-white flex-1">{dashboardData.teamLeaders.accel?.[0]?.name || '--'}</span>
+                       <span className="text-xs font-bold text-emerald-400">{Math.round(dashboardData.teamLeaders.accel?.[0]?.accel || 0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                       <span className="text-xs text-slate-400 font-medium w-1/3">Velocity (km/h)</span>
+                       <span className="text-sm font-bold text-white flex-1">{dashboardData.teamLeaders.topSpeed?.[0]?.name || '--'}</span>
+                       <span className="text-xs font-bold text-amber-400">{(dashboardData.teamLeaders.topSpeed?.[0]?.topSpeed7d || 0).toFixed(1)}</span>
+                    </div>
+                 </div>
+              </div>
+            )}
           </CardContent>
           <CardFooter className="pt-6 border-t border-neutral-800/50">
             <Button 
