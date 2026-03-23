@@ -266,11 +266,20 @@ export default function SessionDetailPage() {
                               <XAxis dataKey="name" tick={{fontSize: 9, fill: '#94a3b8', fontWeight: 'bold'}} tickLine={false} axisLine={false} />
                               <YAxis tick={{fontSize: 9, fill: '#94a3b8'}} tickLine={false} axisLine={false} />
                               <Tooltip 
-                                 contentStyle={{ backgroundColor: '#131313', borderRadius: '12px', border: '1px solid #262626', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
-                                 labelStyle={{ display: 'none' }}
-                                 itemStyle={{ fontWeight: 'bold', fontSize: '12px' }}
-                                 formatter={(value: any, name: any, props: any) => [value, props.payload.name]}
                                  cursor={{fill: '#222'}}
+                                 content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                       const data = payload[0].payload;
+                                       return (
+                                          <div className="bg-[#131313] px-3 py-2 rounded-lg border border-neutral-800 shadow-xl flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: data.fill }} />
+                                            <span className="font-bold text-slate-300 text-xs">{data.name}:</span>
+                                            <span className="font-black text-white text-sm">{data.value}</span>
+                                          </div>
+                                       );
+                                    }
+                                    return null;
+                                 }}
                               />
                               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                 {blockChartData.map((entry, index) => (

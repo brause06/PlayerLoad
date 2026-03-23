@@ -267,8 +267,7 @@ export default function DashboardPage() {
                   {data.weeklyTopSpeeds.map((player: any, i: number) => (
                     <div 
                       key={player.id} 
-                      className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors cursor-help"
-                      title={player.sessionDate ? `Alcanzado el ${new Date(player.sessionDate).toLocaleDateString()} en ${player.sessionType}` : 'Sesión desconocida'}
+                      className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-amber-500 text-white shadow-sm' : i === 1 ? 'bg-amber-500/20 text-amber-500' : i === 2 ? 'bg-amber-500/10 text-amber-400' : 'bg-[#222] text-slate-500'}`}>
@@ -279,8 +278,15 @@ export default function DashboardPage() {
                           <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500">{player.position}</div>
                         </div>
                       </div>
-                      <div className="font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full text-sm tabular-nums">
-                        {(player.top_speed_max ?? 0).toFixed(1)}
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full text-sm tabular-nums">
+                          {(player.top_speed_max ?? 0).toFixed(1)} km/h
+                        </div>
+                        {player.sessionDate && (
+                          <div className="text-[9px] uppercase font-bold tracking-widest text-slate-500">
+                            {new Date(player.sessionDate).toLocaleDateString()} • {player.sessionType}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -311,8 +317,7 @@ export default function DashboardPage() {
                   {data.topSpeeds.map((player: any, i: number) => (
                     <div 
                       key={player.id} 
-                      className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors cursor-help"
-                      title={player.sessionDate ? `Alcanzado el ${new Date(player.sessionDate).toLocaleDateString()} en ${player.sessionType}` : 'Sesión desconocida'}
+                      className="flex items-center justify-between p-4 hover:bg-[#1a1a1a] transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-[#222] text-slate-400`}>
@@ -320,11 +325,18 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <div className="font-medium text-sm text-slate-200">{player.name}</div>
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">{player.position}</div>
+                          <div className="text-[10px] uppercase font-bold tracking-widest text-slate-600">{player.position}</div>
                         </div>
                       </div>
-                      <div className="font-bold text-slate-300 px-3 py-1 rounded-full text-sm tabular-nums">
-                        {(player.top_speed_max ?? 0).toFixed(1)}
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="font-bold text-slate-300 px-3 py-1 rounded-full text-sm tabular-nums">
+                          {(player.top_speed_max ?? 0).toFixed(1)} km/h
+                        </div>
+                        {player.sessionDate && (
+                          <div className="text-[9px] uppercase font-bold tracking-widest text-slate-500">
+                            {new Date(player.sessionDate).toLocaleDateString()} • {player.sessionType}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

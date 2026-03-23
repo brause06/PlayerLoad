@@ -136,10 +136,11 @@ export default async function ReadinessBoardPage({
   });
 
   // 7. Apply filters
-  const search = (searchParams.search as string)?.toLowerCase();
-  const posFilter = searchParams.position as string;
-  const statusFilter = searchParams.status as string;
-  const sortBy = searchParams.sort as string || "name-asc";
+  const params = await searchParams;
+  const search = (params.search as string)?.toLowerCase();
+  const posFilter = params.position as string;
+  const statusFilter = params.status as string;
+  const sortBy = params.sort as string || "name-asc";
 
   if (search) readinessData = readinessData.filter(p => p.name.toLowerCase().includes(search));
   if (posFilter && posFilter !== "all") readinessData = readinessData.filter(p => p.position === posFilter);

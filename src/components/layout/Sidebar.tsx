@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Activity, Upload, BarChart2, LogOut, Bell, Settings } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
+import { Users, Activity, Upload, BarChart2, LogOut, Bell, Settings, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "./NotificationBell";
 
@@ -88,6 +88,13 @@ export function SidebarContent() {
                 >
                   <Settings className="h-5 w-5 text-indigo-400" />
                   <span>Settings</span>
+                </Link>
+                <Link 
+                  href="/manual"
+                  className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${pathname.startsWith('/manual') ? 'bg-[#222] text-white font-medium border border-neutral-800' : 'hover:bg-[#1a1a1a] hover:text-white border border-transparent'}`}
+                >
+                  <BookOpen className="h-5 w-5 text-indigo-400" />
+                  <span>Manual de Uso</span>
                 </Link>
             </>
         )}
